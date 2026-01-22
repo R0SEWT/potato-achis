@@ -1,0 +1,29 @@
+# Main configuration file
+# Potato-ACHIS: Domain Adaptation for Andean Potato Disease Classification
+
+defaults:
+  - model: baseline
+  - data: potato
+  - _self_
+
+# Experiment settings
+experiment:
+  name: "potato_disease_da"
+  seed: 42
+  
+# Paths
+paths:
+  data_dir: "./data"
+  output_dir: "./outputs"
+  log_dir: "./logs"
+
+# Training
+training:
+  max_epochs: 50
+  batch_size: 32
+  num_workers: 4
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  
+# Device
+device: "cuda"  # or "cpu"

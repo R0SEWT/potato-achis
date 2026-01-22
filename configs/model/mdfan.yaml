@@ -1,0 +1,30 @@
+# MDFAN model configuration
+# Multi-source Domain Feature Adaptation Network
+
+type: "mdfan"
+backbone: "resnet50"
+pretrained: true
+num_classes: 5  # 5 potato disease types
+num_sources: 2  # Number of source domains
+
+# Architecture
+bottleneck_dim: 256
+hidden_dim: 1024
+dropout: 0.5
+
+# Loss weights
+loss_weights:
+  classification: 1.0
+  domain_adversarial: 0.5
+  mmd: 1.0
+  # classifier_alignment: 0.3  # DEFERRED
+
+# Training schedule
+stage1_epochs: 30  # Feature alignment
+stage2_epochs: 20  # Fine-tuning (optional classifier alignment)
+
+# GRL lambda scheduling
+grl_lambda:
+  initial: 0.0
+  final: 1.0
+  warmup_epochs: 10

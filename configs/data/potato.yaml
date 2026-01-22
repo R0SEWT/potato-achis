@@ -1,0 +1,38 @@
+# Dataset configuration for potato disease classification
+
+# Source domains (labeled)
+source_domains:
+  - name: "plantvillage"
+    path: "${paths.data_dir}/raw/plantvillage"
+    classes:
+      - "early_blight"
+      - "late_blight"
+      - "healthy"
+      - "bacterial_wilt"
+      - "virus"
+      
+  - name: "local_commercial"
+    path: "${paths.data_dir}/raw/local_commercial"
+    # Same class structure
+
+# Target domain (Andean field - unlabeled for training)
+target_domain:
+  name: "andean_field"
+  path: "${paths.data_dir}/raw/andean_field"
+  unlabeled_path: "${paths.data_dir}/raw/andean_field/unlabeled"
+  labeled_path: "${paths.data_dir}/raw/andean_field/labeled"
+  
+# OOD classes for open-set evaluation
+ood_classes:
+  - "frost_damage"
+  - "nutrient_deficiency"
+  - "unknown"
+
+# Data loading
+image_size: 224
+batch_size: 32
+num_workers: 4
+
+# Augmentation
+use_andean_augmentation: true
+augmentation_strength: "medium"  # light, medium, strong

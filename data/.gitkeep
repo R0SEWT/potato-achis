@@ -1,0 +1,12 @@
+# Data directory placeholder
+# Structure:
+# data/
+# ├── raw/
+# │   ├── plantvillage/
+# │   ├── local_commercial/
+# │   └── andean_field/
+# │       ├── labeled/
+# │       ├── unlabeled/
+# │       └── ood_classes/
+# ├── processed/
+# └── splits/

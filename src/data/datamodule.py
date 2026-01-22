@@ -1,0 +1,244 @@
+"""
+Data Module
+===========
+Central data management for potato disease classification.
+Handles dataset creation, transforms, and dataloaders.
+"""
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import torch
+from torch.utils.data import DataLoader, random_split
+
+from .datasets import PotatoDiseaseDataset, MultiSourceDataset, UnlabeledDataset
+from .transforms import get_train_transforms, get_val_transforms, AndeanFieldTransform
+
+
+class PotatoDataModule:
+    """
+    Data module for potato disease classification.
+    
+    Handles:
+    - Loading source and target datasets
+    - Creating train/val/test splits
+    - Setting up dataloaders
+    - Multi-source domain adaptation setup
+    
+    Args:
+        data_dir: Root data directory
+        batch_size: Batch size for dataloaders
+        num_workers: Number of dataloader workers
+        image_size: Target image size
+        val_split: Validation split ratio
+        use_andean_aug: Use Andean field augmentations
+        aug_strength: Augmentation strength
+    """
+    
+    def __init__(
+        self,
+        data_dir: str = "./data",
+        batch_size: int = 32,
+        num_workers: int = 4,
+        image_size: int = 224,
+        val_split: float = 0.2,
+        use_andean_aug: bool = True,
+        aug_strength: str = "medium",
+    ):
+        self.data_dir = Path(data_dir)
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.image_size = image_size
+        self.val_split = val_split
+        self.use_andean_aug = use_andean_aug
+        self.aug_strength = aug_strength
+        
+        # Datasets (initialized in setup)
+        self.train_dataset = None
+        self.val_dataset = None
+        self.test_dataset = None
+        
+        # Multi-source datasets
+        self.source_datasets = []
+        self.target_dataset = None
+        
+        # Transforms
+        self._setup_transforms()
+    
+    def _setup_transforms(self):
+        """Setup data transforms."""
+        if self.use_andean_aug:
+            self.train_transform = AndeanFieldTransform(
+                image_size=self.image_size,
+                augment=True,
+                andean_intensity=self.aug_strength,
+            )
+        else:
+            self.train_transform = get_train_transforms(
+                image_size=self.image_size,
+                strength=self.aug_strength,
+            )
+        
+        self.val_transform = get_val_transforms(image_size=self.image_size)
+    
+    def setup_single_source(
+        self,
+        source_dir: str,
+        classes: Optional[List[str]] = None,
+    ):
+        """
+        Setup for single-source training (baseline).
+        
+        Args:
+            source_dir: Path to source dataset
+            classes: List of class names
+        """
+        full_dataset = PotatoDiseaseDataset(
+            root=source_dir,
+            transform=self.train_transform,
+            classes=classes,
+        )
+        
+        # Split into train/val
+        val_size = int(len(full_dataset) * self.val_split)
+        train_size = len(full_dataset) - val_size
+        
+        self.train_dataset, self.val_dataset = random_split(
+            full_dataset,
+            [train_size, val_size],
+            generator=torch.Generator().manual_seed(42),
+        )
+        
+        # Apply val transform to validation set
+        # Note: This requires custom handling since random_split returns Subset
+        self.val_dataset.dataset.transform = self.val_transform
+    
+    def setup_multi_source(
+        self,
+        source_dirs: List[str],
+        target_dir: str,
+        source_names: Optional[List[str]] = None,
+        classes: Optional[List[str]] = None,
+    ):
+        """
+        Setup for multi-source domain adaptation.
+        
+        Args:
+            source_dirs: List of source dataset directories
+            target_dir: Target dataset directory
+            source_names: Names for source domains
+            classes: List of class names
+        """
+        # Create source datasets
+        self.source_datasets = []
+        for i, src_dir in enumerate(source_dirs):
+            dataset = PotatoDiseaseDataset(
+                root=src_dir,
+                transform=self.train_transform,
+                classes=classes,
+                domain_label=i,  # Source domain labels: 0, 1, ...
+            )
+            self.source_datasets.append(dataset)
+        
+        # Create target dataset (unlabeled)
+        self.target_dataset = UnlabeledDataset(
+            root=target_dir,
+            transform=self.train_transform,
+            domain_label=len(source_dirs),  # Target domain label
+        )
+        
+        # Create multi-source wrapper
+        self.multi_source = MultiSourceDataset(
+            source_datasets=self.source_datasets,
+            target_dataset=self.target_dataset,
+            source_names=source_names,
+        )
+    
+    def get_train_loader(self) -> DataLoader:
+        """Get training dataloader (single-source)."""
+        if self.train_dataset is None:
+            raise RuntimeError("Call setup_single_source() first")
+        
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            drop_last=True,
+        )
+    
+    def get_val_loader(self) -> DataLoader:
+        """Get validation dataloader."""
+        if self.val_dataset is None:
+            raise RuntimeError("Call setup_single_source() first")
+        
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+    
+    def get_multi_source_loaders(self) -> Tuple[List[DataLoader], DataLoader]:
+        """
+        Get dataloaders for multi-source domain adaptation.
+        
+        Returns:
+            Tuple of (source_loaders, target_loader)
+        """
+        if self.multi_source is None:
+            raise RuntimeError("Call setup_multi_source() first")
+        
+        return self.multi_source.get_dataloaders(
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+        )
+    
+    def get_test_loader(
+        self,
+        test_dir: str,
+        classes: Optional[List[str]] = None,
+    ) -> DataLoader:
+        """
+        Get test dataloader for evaluation.
+        
+        Args:
+            test_dir: Test dataset directory
+            classes: Class names (use source classes if None)
+        """
+        if classes is None and self.source_datasets:
+            classes = self.source_datasets[0].classes
+        
+        test_dataset = PotatoDiseaseDataset(
+            root=test_dir,
+            transform=self.val_transform,
+            classes=classes,
+        )
+        
+        return DataLoader(
+            test_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+    
+    @property
+    def num_classes(self) -> int:
+        """Get number of classes."""
+        if self.source_datasets:
+            return len(self.source_datasets[0].classes)
+        if self.train_dataset:
+            return len(self.train_dataset.dataset.classes)
+        return 5  # Default
+    
+    @property
+    def classes(self) -> List[str]:
+        """Get class names."""
+        if self.source_datasets:
+            return self.source_datasets[0].classes
+        if self.train_dataset:
+            return self.train_dataset.dataset.classes
+        return PotatoDiseaseDataset.DEFAULT_CLASSES
