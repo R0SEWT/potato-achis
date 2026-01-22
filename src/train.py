@@ -52,7 +52,7 @@ def parse_args():
                         help='Model type')
     parser.add_argument('--backbone', type=str, default='mobilenet_v3_small',
                         help='Backbone network')
-    parser.add_argument('--num_classes', type=int, default=5,
+    parser.add_argument('--num_classes', type=int, default=15,
                         help='Number of disease classes')
     parser.add_argument('--pretrained', action='store_true', default=True,
                         help='Use pretrained backbone')

@@ -32,7 +32,7 @@ class BaselineModel(nn.Module):
     def __init__(
         self,
         backbone_name: str = "mobilenet_v3_small",
-        num_classes: int = 5,
+        num_classes: int = 15,
         pretrained: bool = True,
         bottleneck_dim: int | None = 256,
         dropout: float = 0.5,
@@ -125,7 +125,7 @@ class ModelFactory:
         """Create baseline classification model."""
         return BaselineModel(
             backbone_name=config.get("backbone", "mobilenet_v3_small"),
-            num_classes=config.get("num_classes", 5),
+            num_classes=config.get("num_classes", 15),
             pretrained=config.get("pretrained", True),
             bottleneck_dim=config.get("bottleneck_dim", 256),
             dropout=config.get("dropout", 0.5),
@@ -137,7 +137,7 @@ class ModelFactory:
         """Create MDFAN model for domain adaptation."""
         return MDFAN(
             backbone_name=config.get("backbone", "resnet50"),
-            num_classes=config.get("num_classes", 5),
+            num_classes=config.get("num_classes", 15),
             num_sources=config.get("num_sources", 2),
             pretrained=config.get("pretrained", True),
             bottleneck_dim=config.get("bottleneck_dim", 256),

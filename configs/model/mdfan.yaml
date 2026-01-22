@@ -4,7 +4,7 @@
 type: "mdfan"
 backbone: "resnet50"
 pretrained: true
-num_classes: 5 # 5 potato disease types
+num_classes: 15 # 15 PlantVillage classes (Pepper, Potato, Tomato)
 num_sources: 2 # Number of source domains
 
 # Architecture

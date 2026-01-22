@@ -44,7 +44,7 @@ class MDFAN(nn.Module):
     def __init__(
         self,
         backbone_name: str = "resnet50",
-        num_classes: int = 5,
+        num_classes: int = 15,
         num_sources: int = 2,
         pretrained: bool = True,
         bottleneck_dim: int = 256,

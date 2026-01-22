@@ -44,11 +44,24 @@ class PotatoDiseaseDataset(BaseDataset):
     """
 
     DEFAULT_CLASSES = [
-        "early_blight",
-        "late_blight",
-        "healthy",
-        "bacterial_wilt",
-        "virus",
+        # Pepper (2)
+        "pepper_bell_bacterial_spot",
+        "pepper_bell_healthy",
+        # Potato (3)
+        "potato_early_blight",
+        "potato_healthy",
+        "potato_late_blight",
+        # Tomato (10)
+        "tomato_bacterial_spot",
+        "tomato_early_blight",
+        "tomato_healthy",
+        "tomato_late_blight",
+        "tomato_leaf_mold",
+        "tomato_mosaic_virus",
+        "tomato_septoria_leaf_spot",
+        "tomato_spider_mites_two_spotted_spider_mite",
+        "tomato_target_spot",
+        "tomato_yellowleaf_curl_virus",
     ]
 
     def __init__(
@@ -105,11 +118,15 @@ class PotatoDiseaseDataset(BaseDataset):
                     continue
 
             # Normalize class name
-            # Handle PlantVillage: "Potato___Early_blight" -> "early_blight"
-            if "___" in folder_name:
-                class_name = folder_name.split("___")[-1].lower().replace(" ", "_")
-            else:
-                class_name = folder_name.lower().replace(" ", "_")
+            # Handle PlantVillage: "Potato___Early_blight" -> "potato_early_blight"
+            # Preserve plant prefix to avoid class name collisions (e.g., multiple "healthy")
+            # Clean up multiple underscores and redundant prefixes
+            class_name = folder_name.lower().replace("___", "_").replace("__", "_").replace(" ", "_")
+            
+            # Remove redundant plant name prefix (e.g., "tomato_tomato_mosaic" -> "tomato_mosaic")
+            parts = class_name.split("_")
+            if len(parts) > 1 and parts[0] == parts[1]:
+                class_name = "_".join(parts[1:])
 
             if class_name not in classes:
                 classes.append(class_name)

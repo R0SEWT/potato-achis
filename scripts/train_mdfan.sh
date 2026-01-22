@@ -14,7 +14,7 @@ BATCH_SIZE="${BATCH_SIZE:-32}"
 LR="${LR:-0.001}"
 LAMBDA_MMD="${LAMBDA_MMD:-1.0}"
 LAMBDA_ADV="${LAMBDA_ADV:-0.5}"
-OUTPUT_DIR="${OUTPUT_DIR:-./outputs}"
+OUTPUT_DIR="${OUTPUT_DIR:-./outputs/plantvillage}"
 
 echo "🥔 Training MDFAN Model"
 echo "========================"

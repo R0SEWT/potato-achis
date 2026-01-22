@@ -105,7 +105,7 @@ class PotatoDataModule:
         self,
         source_dir: str,
         classes: Optional[List[str]] = None,
-        class_filter: Optional[str] = "Potato",
+        class_filter: Optional[str] = None,
     ):
         """
         Setup for single-source training (baseline).
@@ -113,7 +113,7 @@ class PotatoDataModule:
         Args:
             source_dir: Path to source dataset
             classes: List of class names (auto-detected if None)
-            class_filter: Filter to select only certain classes (e.g., "Potato")
+            class_filter: Filter to select only certain classes (e.g., "Potato", None for all)
         """
         full_dataset = PotatoDiseaseDataset(
             root=source_dir,

@@ -11,7 +11,7 @@ DATA_DIR="${DATA_DIR:-./data/raw/plantvillage}"
 EPOCHS="${EPOCHS:-50}"
 BATCH_SIZE="${BATCH_SIZE:-32}"
 LR="${LR:-0.001}"
-OUTPUT_DIR="${OUTPUT_DIR:-./outputs}"
+OUTPUT_DIR="${OUTPUT_DIR:-./outputs/plantvillage}"
 
 echo "🥔 Training Baseline Model"
 echo "=========================="

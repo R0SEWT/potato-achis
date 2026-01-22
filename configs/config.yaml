@@ -3,18 +3,18 @@
 
 defaults:
   - model: baseline
-  - data: potato
+  - data: plantvillage
   - _self_
 
 # Experiment settings
 experiment:
-  name: "potato_disease_da"
+  name: "plantvillage_disease_classification"
   seed: 42
 
 # Paths
 paths:
   data_dir: "./data"
-  output_dir: "./outputs"
+  output_dir: "./outputs/plantvillage"
   log_dir: "./logs"
 
 # Training

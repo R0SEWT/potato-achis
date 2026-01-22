@@ -50,7 +50,7 @@ def parse_args():
     parser.add_argument('--model', type=str, default='baseline',
                         choices=['baseline', 'mdfan'])
     parser.add_argument('--backbone', type=str, default='mobilenet_v3_small')
-    parser.add_argument('--num_classes', type=int, default=5)
+    parser.add_argument('--num_classes', type=int, default=15)
 
     # Data
     parser.add_argument('--test_dir', type=str, required=True,
