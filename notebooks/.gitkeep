@@ -1,4 +1,5 @@
 # Jupyter notebooks
+# 00_data_exploration.ipynb - Data exploration and visualization
 # 01_baseline_mobilenet.ipynb - Control experiment
 # 02_mdfan_training.ipynb - MDFAN training
 # 03_ood_analysis.ipynb - Open-set evaluation

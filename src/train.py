@@ -92,6 +92,10 @@ def parse_args():
     parser.add_argument('--save_freq', type=int, default=10,
                         help='Checkpoint save frequency')
 
+    # TensorBoard
+    parser.add_argument('--log_histograms', action='store_true',
+                        help='Log weight histograms (slower)')
+
     # Device
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--seed', type=int, default=42)
@@ -380,6 +384,32 @@ def main():
     model = model.to(device)
     logger.info(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
+    # Log model graph to TensorBoard
+    try:
+        dummy_input = torch.randn(1, 3, args.image_size, args.image_size).to(device)
+        writer.add_graph(model, dummy_input)
+    except Exception as e:
+        logger.warning(f"Could not log model graph: {e}")
+
+    # Log hyperparameters
+    hparams = {
+        "model": args.model,
+        "backbone": args.backbone,
+        "num_classes": num_classes,
+        "batch_size": args.batch_size,
+        "lr": args.lr,
+        "weight_decay": args.weight_decay,
+        "epochs": args.epochs,
+        "image_size": args.image_size,
+        "use_andean_aug": args.use_andean_aug,
+    }
+    if args.model == "mdfan":
+        hparams.update({
+            "lambda_mmd": args.lambda_mmd,
+            "lambda_adv": args.lambda_adv,
+        })
+    writer.add_text("hyperparameters", str(hparams), 0)
+
     # Loss functions
     criterion_cls = ClassificationLoss(num_classes=num_classes)
 
@@ -434,7 +464,7 @@ def main():
 
         # Validate
         val_metrics = evaluate(
-            model, val_loader, criterion_cls, device, args.num_classes
+            model, val_loader, criterion_cls, device, num_classes
         )
 
         # Update scheduler
@@ -454,6 +484,14 @@ def main():
         # Log learning rate
         current_lr = optimizer.param_groups[0]["lr"]
         writer.add_scalar("train/learning_rate", current_lr, epoch)
+
+        # Log weight histograms (optional, slower)
+        if args.log_histograms and (epoch % 5 == 0 or epoch == args.epochs - 1):
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    writer.add_histogram(f"weights/{name}", param, epoch)
+                    if param.grad is not None:
+                        writer.add_histogram(f"grads/{name}", param.grad, epoch)
 
         history['train'].append(train_metrics)
         history['val'].append(val_metrics)
