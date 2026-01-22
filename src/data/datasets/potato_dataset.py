@@ -17,34 +17,40 @@ from .base_dataset import BaseDataset
 class PotatoDiseaseDataset(BaseDataset):
     """
     Potato disease image dataset.
+
+    Supports two directory structures:
     
-    Expected directory structure:
+    1. Standard (class subfolders):
         root/
         ├── early_blight/
-        │   ├── img1.jpg
-        │   └── ...
         ├── late_blight/
-        ├── healthy/
-        ├── bacterial_wilt/
-        └── virus/
+        └── healthy/
     
+    2. PlantVillage style:
+        root/
+        ├── Potato___Early_blight/
+        ├── Potato___Late_blight/
+        └── Potato___healthy/
+
     Args:
         root: Root directory containing class folders
         transform: Image transforms
         target_transform: Label transforms
         labeled: Whether to return labels (False for unlabeled target domain)
         domain_label: Optional domain label for domain adaptation
+        classes: List of class names to use (auto-detected if None)
+        class_filter: Optional prefix filter (e.g., "Potato" to only load potato classes)
         extensions: Valid image file extensions
     """
-    
+
     DEFAULT_CLASSES = [
         "early_blight",
-        "late_blight", 
+        "late_blight",
         "healthy",
         "bacterial_wilt",
         "virus",
     ]
-    
+
     def __init__(
         self,
         root: str,
@@ -53,45 +59,92 @@ class PotatoDiseaseDataset(BaseDataset):
         labeled: bool = True,
         domain_label: Optional[int] = None,
         classes: Optional[List[str]] = None,
-        extensions: Tuple[str, ...] = (".jpg", ".jpeg", ".png", ".bmp"),
+        class_filter: Optional[str] = None,
+        extensions: Tuple[str, ...] = (".jpg", ".jpeg", ".png", ".bmp", ".JPG"),
     ):
         super().__init__(root, transform, target_transform)
-        
+
         self.labeled = labeled
         self.domain_label = domain_label
         self.extensions = extensions
-        
-        # Use provided classes or defaults
-        self.classes = classes if classes is not None else self.DEFAULT_CLASSES
+        self.class_filter = class_filter
+
+        # Auto-detect classes from directory structure if not provided
+        if classes is None:
+            self.classes, self.folder_to_class = self._detect_classes()
+        else:
+            self.classes = classes
+            self.folder_to_class = {cls: cls for cls in classes}
+
         self.class_to_idx = {cls: i for i, cls in enumerate(self.classes)}
-        
+
         self._load_samples()
-    
+
+    def _detect_classes(self) -> Tuple[List[str], Dict[str, str]]:
+        """
+        Auto-detect classes from directory structure.
+
+        Handles PlantVillage naming (Potato___Early_blight -> early_blight)
+        and standard naming (early_blight -> early_blight).
+
+        Returns:
+            Tuple of (class_names, folder_to_class_mapping)
+        """
+        classes = []
+        folder_to_class = {}
+
+        for folder in sorted(self.root.iterdir()):
+            if not folder.is_dir():
+                continue
+
+            folder_name = folder.name
+
+            # Apply filter if specified (e.g., only "Potato" classes)
+            if self.class_filter:
+                if not folder_name.lower().startswith(self.class_filter.lower()):
+                    continue
+
+            # Normalize class name
+            # Handle PlantVillage: "Potato___Early_blight" -> "early_blight"
+            if "___" in folder_name:
+                class_name = folder_name.split("___")[-1].lower().replace(" ", "_")
+            else:
+                class_name = folder_name.lower().replace(" ", "_")
+
+            if class_name not in classes:
+                classes.append(class_name)
+
+            folder_to_class[folder_name] = class_name
+
+        if not classes:
+            raise ValueError(
+                f"No class folders found in {self.root}. "
+                f"Filter: {self.class_filter}"
+            )
+
+        return classes, folder_to_class
+
     def _load_samples(self):
         """Load image paths and labels from directory structure."""
         self.samples = []
-        
-        for class_name in self.classes:
-            class_dir = self.root / class_name
-            
+
+        for folder_name, class_name in self.folder_to_class.items():
+            class_dir = self.root / folder_name
+
             if not class_dir.exists():
                 continue
-            
+
             class_idx = self.class_to_idx[class_name]
-            
+
             for img_path in class_dir.iterdir():
-                if img_path.suffix.lower() in self.extensions:
+                if img_path.suffix.lower() in [ext.lower() for ext in self.extensions]:
                     self.samples.append((str(img_path), class_idx))
-        
+
         if len(self.samples) == 0:
-            # Try loading from flat directory (unlabeled mode)
-            self._load_flat_samples()
-    
-    def _load_flat_samples(self):
-        """Load samples from flat directory (no class subfolders)."""
-        for img_path in self.root.iterdir():
-            if img_path.suffix.lower() in self.extensions:
-                self.samples.append((str(img_path), -1))  # -1 for unknown label
+            raise ValueError(
+                f"No images found in {self.root}. "
+                f"Classes: {self.classes}, Extensions: {self.extensions}"
+            )
     
     def __getitem__(
         self, 

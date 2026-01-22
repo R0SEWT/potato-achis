@@ -1,10 +1,11 @@
-<<<<<<< HEAD
 # 🥔 Potato-ACHIS
 
 **Multi-source Domain Feature Adaptation Network for Andean Potato Disease Classification**
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.0+](https://img.shields.io/badge/pytorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
+[![uv](https://img.shields.io/badge/uv-package%20manager-blueviolet)](https://docs.astral.sh/uv/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## 🎯 Overview
@@ -13,67 +14,52 @@ This project implements a **Multi-source Domain Feature Adaptation Network (MDFA
 
 ### Key Features
 
-- **Multi-source Domain Adaptation**: Leverages multiple source domains (PlantVillage, commercial images) to improve generalization to Andean field conditions
-- **Flexible Backbones**: Supports MobileNetV3 (lightweight) and ResNet50 (accuracy) via `timm`
-- **Two-stage Alignment**: 
-  - Stage 1: Feature-level alignment using MMD loss + adversarial training (GRL)
-  - Stage 2: Classifier-level alignment (scaffolded for future work)
-- **Open-Set Recognition**: OOD detection for rejecting unknown disease classes (frost damage, nutrient deficiency)
-- **Andean Field Augmentations**: Specialized transforms simulating highland lighting conditions
+- 🔄 **Multi-source Domain Adaptation**: Leverages multiple source domains (PlantVillage, commercial images) to improve generalization
+- 🏔️ **Andean Field Augmentations**: Specialized transforms simulating highland lighting conditions
+- 🎯 **Open-Set Recognition**: OOD detection for rejecting unknown disease classes
+- ⚡ **Flexible Backbones**: MobileNetV3 (lightweight) and ResNet50 (accuracy) via `timm`
+- 🛠️ **Modern Tooling**: `uv` for fast dependency management, `ruff` for linting
 
 ## 📁 Project Structure
 
 ```
 potato-achis/
-├── configs/                    # Hydra configuration files
-│   ├── config.yaml            # Main config
-│   ├── model/
-│   │   ├── baseline.yaml      # MobileNet/ResNet baseline
-│   │   └── mdfan.yaml         # MDFAN configuration
-│   └── data/
-│       └── potato.yaml        # Dataset configuration
-│
-├── src/                       # Source code
+├── src/
 │   ├── models/
-│   │   ├── model.py          # Model factory (MobileNet, ResNet, MDFAN)
-│   │   ├── backbones/        # Feature extractors
-│   │   ├── mdfan/            # MDFAN components
-│   │   │   ├── mdfan_model.py
-│   │   │   ├── domain_discriminator.py
-│   │   │   └── feature_extractor.py
-│   │   ├── heads/            # Classification heads
-│   │   └── components/       # GRL, bottleneck layers
-│   │
+│   │   ├── model.py              # Factory: BaselineModel, MDFAN
+│   │   ├── backbones/            # MobileNet, ResNet (timm)
+│   │   ├── mdfan/                # Domain adaptation components
+│   │   ├── heads/                # Classification heads
+│   │   └── components/           # GRL, bottleneck
 │   ├── data/
-│   │   ├── datasets/         # Dataset classes
-│   │   ├── transforms/       # Augmentations (incl. Andean)
-│   │   └── datamodule.py     # Data management
-│   │
-│   ├── losses/               # Loss functions
-│   │   ├── mmd_loss.py       # Maximum Mean Discrepancy
-│   │   └── domain_adversarial_loss.py
-│   │
-│   ├── utils/
-│   │   ├── metrics.py        # Evaluation metrics
-│   │   ├── ood_detection.py  # Open-set recognition
-│   │   └── visualization.py  # t-SNE, Grad-CAM
-│   │
-│   ├── train.py              # Training entry point
-│   └── eval.py               # Evaluation entry point
-│
-├── data/                     # Data directory (gitignored)
-│   └── raw/
-│       ├── plantvillage/     # Source domain 1
-│       ├── local_commercial/ # Source domain 2
-│       └── andean_field/     # Target domain
-│
-├── notebooks/                # Jupyter notebooks
-├── scripts/                  # Shell scripts
-├── outputs/                  # Model outputs
-└── logs/                     # Training logs
+│   │   ├── datasets/             # Dataset classes
+│   │   ├── transforms/           # Augmentations (Andean)
+│   │   └── datamodule.py
+│   ├── losses/                   # MMD, adversarial losses
+│   ├── utils/                    # Metrics, OOD, visualization
+│   ├── train.py
+│   └── eval.py
+├── configs/                      # Hydra configs
+├── data/                         # Data directory
+├── notebooks/
+├── tests/
+├── pyproject.toml               # uv/hatch config
+└── uv.lock                      # Lockfile
 ```
 
 ## 🚀 Quick Start
+
+### Prerequisites
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/):
+
+```bash
+# Linux/macOS
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or with pip
+pip install uv
+```
 
 ### Installation
 
@@ -82,23 +68,44 @@ potato-achis/
 git clone https://github.com/R0SEWT/potato-achis.git
 cd potato-achis
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or: venv\Scripts\activate  # Windows
+# Create environment and install dependencies (uv handles everything)
+uv sync
 
-# Install dependencies
-pip install -r requirements.txt
+# With optional dependencies
+uv sync --extra dev --extra viz --extra tracking
 
-# Or install as package
-pip install -e .
+# Or install all extras
+uv sync --all-extras
+```
+
+### Development
+
+```bash
+# Run training
+uv run python src/train.py --model baseline --backbone mobilenet_v3_small
+
+# Run tests
+uv run pytest
+
+# Lint and format
+uv run ruff check src/
+uv run ruff format src/
+
+# Type checking
+uv run mypy src/
+
+# Add a new dependency
+uv add pandas
+
+# Add a dev dependency
+uv add --dev hypothesis
 ```
 
 ### Training
 
 **Baseline (MobileNet without domain adaptation):**
 ```bash
-python src/train.py \
+uv run python src/train.py \
     --model baseline \
     --backbone mobilenet_v3_small \
     --data_dir ./data/raw/plantvillage \
@@ -108,7 +115,7 @@ python src/train.py \
 
 **MDFAN (Multi-source Domain Adaptation):**
 ```bash
-python src/train.py \
+uv run python src/train.py \
     --model mdfan \
     --backbone resnet50 \
     --source_dirs ./data/raw/plantvillage ./data/raw/local_commercial \
@@ -121,7 +128,7 @@ python src/train.py \
 ### Evaluation
 
 ```bash
-python src/eval.py \
+uv run python src/eval.py \
     --checkpoint ./outputs/best_model.pt \
     --test_dir ./data/raw/andean_field/test \
     --ood_dir ./data/raw/andean_field/ood_classes \
@@ -153,7 +160,6 @@ Input Image
     ▼
 ┌─────────────────────┐
 │  Shared Backbone    │  (MobileNetV3 / ResNet50)
-│  (ImageNet pretrained)
 └─────────────────────┘
     │
     ▼
@@ -165,54 +171,70 @@ Input Image
     ▼                              ▼
 ┌─────────────────────┐    ┌─────────────────────┐
 │  Domain Discriminator│   │  Source Classifiers │
-│  (per source-target) │   │  (per source domain)│
 │  + GRL               │   │                     │
 └─────────────────────┘    └─────────────────────┘
     │                              │
     ▼                              ▼
   Domain Loss               Classification Loss
-  (Adversarial)                 (CE)
          │                        │
          └───────┬────────────────┘
                  ▼
-           Total Loss = L_cls + λ_adv * L_domain + λ_mmd * L_mmd
+           Total Loss = L_cls + λ_adv·L_domain + λ_mmd·L_mmd
+```
+
+## 🛠️ Development Commands
+
+```bash
+# Environment info
+uv python list              # List available Python versions
+uv venv --python 3.11       # Create venv with specific Python
+
+# Dependencies
+uv add torch --index pytorch  # Add from specific index
+uv remove pandas              # Remove dependency
+uv lock                       # Update lockfile
+uv tree                       # Show dependency tree
+
+# Running
+uv run pytest -v              # Run tests
+uv run python -m src.train    # Run as module
+uv run jupyter lab            # Start Jupyter (with notebooks extra)
+
+# Build
+uv build                      # Build wheel/sdist
 ```
 
 ## 📈 Expected Results
 
-| Model | Source Accuracy | Target Accuracy | OOD AUROC |
-|-------|-----------------|-----------------|-----------|
+| Model | Source Acc | Target Acc | OOD AUROC |
+|-------|------------|------------|-----------|
 | Baseline (MobileNet) | ~95% | ~70% | ~75% |
 | Baseline (ResNet50) | ~97% | ~75% | ~78% |
-| MDFAN (ResNet50) | ~95% | ~85% | ~85% |
+| **MDFAN (ResNet50)** | ~95% | **~85%** | **~85%** |
 
-## 🛠️ Development Roadmap
+## 🗺️ Roadmap
 
 - [x] Baseline MobileNet/ResNet
 - [x] MDFAN with GRL + MMD
 - [x] OOD detection (MSP, entropy, energy)
 - [x] Andean field augmentations
+- [x] uv package management
 - [ ] Classifier alignment (Stage 2)
 - [ ] Grad-CAM visualization
 - [ ] W&B integration
-- [ ] ONNX export for deployment
+- [ ] ONNX export
 
 ## 📝 Citation
 
-If you use this code, please cite:
-
 ```bibtex
-@software{potato_achis_2026,
+@software{potato_achis_2025,
   author = {R0SEWT},
   title = {Potato-ACHIS: Multi-source Domain Adaptation for Andean Potato Disease Classification},
-  year = {2026},
+  year = {2025},
   url = {https://github.com/R0SEWT/potato-achis}
 }
 ```
 
 ## 📄 License
 
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details
-=======
-# potato-achis
->>>>>>> b1253d8 (Initial commit)
+MIT License - see [LICENSE](LICENSE)

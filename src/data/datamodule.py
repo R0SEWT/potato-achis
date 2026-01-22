@@ -10,9 +10,14 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch.utils.data import DataLoader, random_split
+from torchvision import transforms
 
-from .datasets import PotatoDiseaseDataset, MultiSourceDataset, UnlabeledDataset
-from .transforms import get_train_transforms, get_val_transforms, AndeanFieldTransform
+from .datasets import MultiSourceDataset, PotatoDiseaseDataset, UnlabeledDataset
+from .transforms import (
+    AndeanFieldAugmentation,
+    get_train_transforms,
+    get_val_transforms,
+)
 
 
 class PotatoDataModule:
@@ -61,17 +66,32 @@ class PotatoDataModule:
         # Multi-source datasets
         self.source_datasets = []
         self.target_dataset = None
-        
+
         # Transforms
         self._setup_transforms()
-    
+
     def _setup_transforms(self):
         """Setup data transforms."""
         if self.use_andean_aug:
-            self.train_transform = AndeanFieldTransform(
-                image_size=self.image_size,
-                augment=True,
-                andean_intensity=self.aug_strength,
+            # Combine standard transforms with Andean augmentation
+            andean_aug = AndeanFieldAugmentation(
+                p=0.5,
+                intensity=self.aug_strength,
+            )
+            self.train_transform = transforms.Compose(
+                [
+                    transforms.Resize(
+                        (int(self.image_size * 1.1), int(self.image_size * 1.1))
+                    ),
+                    transforms.RandomCrop(self.image_size),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.RandomVerticalFlip(p=0.5),
+                    transforms.ToTensor(),
+                    andean_aug,
+                    transforms.Normalize(
+                        mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
+                    ),
+                ]
             )
         else:
             self.train_transform = get_train_transforms(
@@ -80,38 +100,43 @@ class PotatoDataModule:
             )
         
         self.val_transform = get_val_transforms(image_size=self.image_size)
-    
+
     def setup_single_source(
         self,
         source_dir: str,
         classes: Optional[List[str]] = None,
+        class_filter: Optional[str] = "Potato",
     ):
         """
         Setup for single-source training (baseline).
-        
+
         Args:
             source_dir: Path to source dataset
-            classes: List of class names
+            classes: List of class names (auto-detected if None)
+            class_filter: Filter to select only certain classes (e.g., "Potato")
         """
         full_dataset = PotatoDiseaseDataset(
             root=source_dir,
             transform=self.train_transform,
             classes=classes,
+            class_filter=class_filter,
         )
-        
+
+        # Store detected classes
+        self._detected_classes = full_dataset.classes
+
         # Split into train/val
         val_size = int(len(full_dataset) * self.val_split)
         train_size = len(full_dataset) - val_size
-        
+
         self.train_dataset, self.val_dataset = random_split(
             full_dataset,
             [train_size, val_size],
             generator=torch.Generator().manual_seed(42),
         )
-        
-        # Apply val transform to validation set
-        # Note: This requires custom handling since random_split returns Subset
-        self.val_dataset.dataset.transform = self.val_transform
+
+        # Store reference to apply different transforms
+        self._full_dataset = full_dataset
     
     def setup_multi_source(
         self,
@@ -224,21 +249,25 @@ class PotatoDataModule:
             num_workers=self.num_workers,
             pin_memory=True,
         )
-    
+
     @property
     def num_classes(self) -> int:
         """Get number of classes."""
+        if hasattr(self, "_detected_classes"):
+            return len(self._detected_classes)
         if self.source_datasets:
             return len(self.source_datasets[0].classes)
-        if self.train_dataset:
+        if self.train_dataset and hasattr(self.train_dataset.dataset, "classes"):
             return len(self.train_dataset.dataset.classes)
         return 5  # Default
-    
+
     @property
     def classes(self) -> List[str]:
         """Get class names."""
+        if hasattr(self, "_detected_classes"):
+            return self._detected_classes
         if self.source_datasets:
             return self.source_datasets[0].classes
-        if self.train_dataset:
+        if self.train_dataset and hasattr(self.train_dataset.dataset, "classes"):
             return self.train_dataset.dataset.classes
         return PotatoDiseaseDataset.DEFAULT_CLASSES

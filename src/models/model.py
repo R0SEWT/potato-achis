@@ -5,7 +5,8 @@ Central factory for creating models: Baseline, MDFAN.
 Supports MobileNet and ResNet backbones.
 """
 
-from typing import Dict, Any, Optional, Union
+from typing import Any
+
 import torch
 import torch.nn as nn
 
@@ -27,25 +28,25 @@ class BaselineModel(nn.Module):
         dropout: Dropout probability
         frozen_stages: Number of backbone stages to freeze
     """
-    
+
     def __init__(
         self,
         backbone_name: str = "mobilenet_v3_small",
         num_classes: int = 5,
         pretrained: bool = True,
-        bottleneck_dim: Optional[int] = 256,
+        bottleneck_dim: int | None = 256,
         dropout: float = 0.5,
         frozen_stages: int = 0,
     ):
         super().__init__()
-        
+
         # Create backbone
         self.backbone, backbone_dim = BackboneFactory.create(
             backbone_name,
             pretrained=pretrained,
             frozen_stages=frozen_stages,
         )
-        
+
         # Create classifier head
         self.head = ClassifierHead(
             in_features=backbone_dim,
@@ -53,15 +54,15 @@ class BaselineModel(nn.Module):
             bottleneck_dim=bottleneck_dim,
             dropout=dropout,
         )
-        
+
         self.backbone_name = backbone_name
         self.num_classes = num_classes
-    
+
     def forward(
-        self, 
+        self,
         x: torch.Tensor,
         return_features: bool = False,
-    ) -> Union[torch.Tensor, tuple]:
+    ) -> torch.Tensor | tuple:
         """
         Forward pass.
         
@@ -74,17 +75,17 @@ class BaselineModel(nn.Module):
             Optionally: (logits, features) tuple
         """
         features = self.backbone(x)
-        
+
         if return_features:
             logits, bottleneck_features = self.head(features, return_features=True)
             return logits, bottleneck_features
-        
+
         return self.head(features)
-    
+
     def extract_features(self, x: torch.Tensor) -> torch.Tensor:
         """Extract backbone features."""
         return self.backbone(x)
-    
+
     def get_bottleneck_features(self, x: torch.Tensor) -> torch.Tensor:
         """Extract bottleneck features."""
         backbone_features = self.backbone(x)
@@ -93,11 +94,11 @@ class BaselineModel(nn.Module):
 
 class ModelFactory:
     """Factory for creating models based on configuration."""
-    
+
     SUPPORTED_TYPES = ["baseline", "mdfan"]
-    
+
     @classmethod
-    def create(cls, config: Dict[str, Any]) -> nn.Module:
+    def create(cls, config: dict[str, Any]) -> nn.Module:
         """
         Create model from configuration dictionary.
         
@@ -108,7 +109,7 @@ class ModelFactory:
             Instantiated model
         """
         model_type = config.get("type", "baseline")
-        
+
         if model_type == "baseline":
             return cls._create_baseline(config)
         elif model_type == "mdfan":
@@ -118,9 +119,9 @@ class ModelFactory:
                 f"Unsupported model type: {model_type}. "
                 f"Supported: {cls.SUPPORTED_TYPES}"
             )
-    
+
     @classmethod
-    def _create_baseline(cls, config: Dict[str, Any]) -> BaselineModel:
+    def _create_baseline(cls, config: dict[str, Any]) -> BaselineModel:
         """Create baseline classification model."""
         return BaselineModel(
             backbone_name=config.get("backbone", "mobilenet_v3_small"),
@@ -130,9 +131,9 @@ class ModelFactory:
             dropout=config.get("dropout", 0.5),
             frozen_stages=config.get("frozen_stages", 0),
         )
-    
+
     @classmethod
-    def _create_mdfan(cls, config: Dict[str, Any]) -> MDFAN:
+    def _create_mdfan(cls, config: dict[str, Any]) -> MDFAN:
         """Create MDFAN model for domain adaptation."""
         return MDFAN(
             backbone_name=config.get("backbone", "resnet50"),

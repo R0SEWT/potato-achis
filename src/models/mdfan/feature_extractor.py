@@ -22,7 +22,7 @@ class FeatureExtractor(nn.Module):
         use_bn: Use batch normalization
         dropout: Dropout probability
     """
-    
+
     def __init__(
         self,
         in_features: int,
@@ -31,22 +31,22 @@ class FeatureExtractor(nn.Module):
         dropout: float = 0.0,
     ):
         super().__init__()
-        
+
         layers = [nn.Linear(in_features, out_features)]
-        
+
         if use_bn:
             layers.append(nn.BatchNorm1d(out_features))
-        
+
         layers.append(nn.ReLU(inplace=True))
-        
+
         if dropout > 0:
             layers.append(nn.Dropout(dropout))
-        
+
         self.extractor = nn.Sequential(*layers)
         self.out_features = out_features
-        
+
         self._init_weights()
-    
+
     def _init_weights(self):
         """Initialize weights."""
         for m in self.modules():
@@ -57,7 +57,7 @@ class FeatureExtractor(nn.Module):
             elif isinstance(m, nn.BatchNorm1d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Extract features."""
         return self.extractor(x)
@@ -75,7 +75,7 @@ class MultiRepresentationExtractor(nn.Module):
         out_features: Output feature dimension per branch
         num_branches: Number of representation branches
     """
-    
+
     def __init__(
         self,
         in_features: int,
@@ -83,17 +83,17 @@ class MultiRepresentationExtractor(nn.Module):
         num_branches: int = 3,
     ):
         super().__init__()
-        
+
         self.num_branches = num_branches
         self.out_features = out_features * num_branches
-        
+
         # Branch 1: Direct mapping
         self.branch1 = nn.Sequential(
             nn.Linear(in_features, out_features),
             nn.BatchNorm1d(out_features),
             nn.ReLU(inplace=True),
         )
-        
+
         # Branch 2: Two-layer bottleneck
         self.branch2 = nn.Sequential(
             nn.Linear(in_features, out_features // 2),
@@ -102,7 +102,7 @@ class MultiRepresentationExtractor(nn.Module):
             nn.BatchNorm1d(out_features),
             nn.ReLU(inplace=True),
         )
-        
+
         # Branch 3: Wide bottleneck
         self.branch3 = nn.Sequential(
             nn.Linear(in_features, out_features * 2),
@@ -111,9 +111,9 @@ class MultiRepresentationExtractor(nn.Module):
             nn.BatchNorm1d(out_features),
             nn.ReLU(inplace=True),
         )
-        
+
         self._init_weights()
-    
+
     def _init_weights(self):
         """Initialize weights."""
         for m in self.modules():
@@ -124,7 +124,7 @@ class MultiRepresentationExtractor(nn.Module):
             elif isinstance(m, nn.BatchNorm1d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Extract multi-representation features.
@@ -135,5 +135,5 @@ class MultiRepresentationExtractor(nn.Module):
         b1 = self.branch1(x)
         b2 = self.branch2(x)
         b3 = self.branch3(x)
-        
+
         return torch.cat([b1, b2, b3], dim=1)

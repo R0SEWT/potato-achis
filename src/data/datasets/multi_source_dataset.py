@@ -8,9 +8,9 @@ Combines multiple source domains with a target domain.
 from typing import Callable, Dict, Iterator, List, Optional, Tuple
 
 import torch
-from torch.utils.data import Dataset, DataLoader, Sampler
+from torch.utils.data import DataLoader, Dataset, Sampler
 
-from .potato_dataset import PotatoDiseaseDataset, UnlabeledDataset
+from .potato_dataset import PotatoDiseaseDataset
 
 
 class MultiSourceDataset:

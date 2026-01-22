@@ -5,7 +5,6 @@ Factory pattern for creating backbone feature extractors.
 Supports: MobileNetV3, ResNet variants via timm.
 """
 
-from typing import Optional, Tuple
 import torch.nn as nn
 
 from .mobilenet import MobileNetBackbone
@@ -14,7 +13,7 @@ from .resnet import ResNetBackbone
 
 class BackboneFactory:
     """Factory for creating backbone networks."""
-    
+
     SUPPORTED_BACKBONES = {
         # MobileNet variants
         "mobilenet_v3_small": ("mobilenet", "mobilenetv3_small_100"),
@@ -25,14 +24,14 @@ class BackboneFactory:
         "resnet50": ("resnet", "resnet50"),
         "resnet101": ("resnet", "resnet101"),
     }
-    
+
     @classmethod
     def create(
         cls,
         name: str,
         pretrained: bool = True,
         frozen_stages: int = 0,
-    ) -> Tuple[nn.Module, int]:
+    ) -> tuple[nn.Module, int]:
         """
         Create a backbone feature extractor.
         
@@ -49,9 +48,9 @@ class BackboneFactory:
                 f"Unsupported backbone: {name}. "
                 f"Supported: {list(cls.SUPPORTED_BACKBONES.keys())}"
             )
-        
+
         backbone_type, model_name = cls.SUPPORTED_BACKBONES[name]
-        
+
         if backbone_type == "mobilenet":
             backbone = MobileNetBackbone(
                 model_name=model_name,
@@ -66,9 +65,9 @@ class BackboneFactory:
             )
         else:
             raise ValueError(f"Unknown backbone type: {backbone_type}")
-        
+
         return backbone, backbone.output_dim
-    
+
     @classmethod
     def list_available(cls) -> list:
         """List all available backbone names."""

@@ -5,7 +5,6 @@ ResNet feature extractor using timm.
 Standard backbone for domain adaptation experiments.
 """
 
-from typing import Optional
 import torch
 import torch.nn as nn
 
@@ -24,7 +23,7 @@ class ResNetBackbone(nn.Module):
         pretrained: Load pretrained ImageNet weights
         frozen_stages: Number of stages to freeze (0-4)
     """
-    
+
     # Output dimensions for ResNet variants
     OUTPUT_DIMS = {
         "resnet18": 512,
@@ -32,7 +31,7 @@ class ResNetBackbone(nn.Module):
         "resnet50": 2048,
         "resnet101": 2048,
     }
-    
+
     def __init__(
         self,
         model_name: str = "resnet50",
@@ -40,10 +39,10 @@ class ResNetBackbone(nn.Module):
         frozen_stages: int = 0,
     ):
         super().__init__()
-        
+
         self.model_name = model_name
         self.output_dim = self.OUTPUT_DIMS.get(model_name, 2048)
-        
+
         # Load model without classifier head
         self.backbone = timm.create_model(
             model_name,
@@ -51,11 +50,11 @@ class ResNetBackbone(nn.Module):
             num_classes=0,  # Remove classifier
             global_pool="avg",
         )
-        
+
         # Freeze stages if specified
         if frozen_stages > 0:
             self._freeze_stages(frozen_stages)
-    
+
     def _freeze_stages(self, num_stages: int):
         """
         Freeze early layers for transfer learning.
@@ -73,7 +72,7 @@ class ResNetBackbone(nn.Module):
                 param.requires_grad = False
             for param in self.backbone.bn1.parameters():
                 param.requires_grad = False
-        
+
         # Freeze layer1-4 progressively
         layers = ['layer1', 'layer2', 'layer3', 'layer4']
         for i, layer_name in enumerate(layers):
@@ -82,7 +81,7 @@ class ResNetBackbone(nn.Module):
                 if layer is not None:
                     for param in layer.parameters():
                         param.requires_grad = False
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Extract features from input images.
@@ -94,11 +93,11 @@ class ResNetBackbone(nn.Module):
             Features of shape (B, output_dim)
         """
         return self.backbone(x)
-    
+
     def get_trainable_params(self):
         """Get list of trainable parameters."""
         return [p for p in self.parameters() if p.requires_grad]
-    
+
     def get_intermediate_features(self, x: torch.Tensor) -> dict:
         """
         Get intermediate features from each stage.
@@ -108,26 +107,26 @@ class ResNetBackbone(nn.Module):
             Dictionary with features from each layer
         """
         features = {}
-        
+
         x = self.backbone.conv1(x)
         x = self.backbone.bn1(x)
         x = self.backbone.act1(x)
         x = self.backbone.maxpool(x)
         features['stem'] = x
-        
+
         x = self.backbone.layer1(x)
         features['layer1'] = x
-        
+
         x = self.backbone.layer2(x)
         features['layer2'] = x
-        
+
         x = self.backbone.layer3(x)
         features['layer3'] = x
-        
+
         x = self.backbone.layer4(x)
         features['layer4'] = x
-        
+
         x = self.backbone.global_pool(x)
         features['pooled'] = x
-        
+
         return features

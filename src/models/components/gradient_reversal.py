@@ -20,7 +20,7 @@ class GradientReversalFunction(Function):
     Forward: identity operation
     Backward: negates gradients and scales by lambda
     """
-    
+
     @staticmethod
     def forward(ctx, x: torch.Tensor, lambda_: float) -> torch.Tensor:
         """
@@ -36,7 +36,7 @@ class GradientReversalFunction(Function):
         """
         ctx.lambda_ = lambda_
         return x.clone()
-    
+
     @staticmethod
     def backward(ctx, grad_output: torch.Tensor):
         """
@@ -67,19 +67,19 @@ class GradientReversalLayer(nn.Module):
         >>> reversed_features = grl(features)
         >>> domain_pred = domain_discriminator(reversed_features)
     """
-    
+
     def __init__(self, lambda_: float = 1.0):
         super().__init__()
         self.lambda_ = lambda_
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply gradient reversal."""
         return GradientReversalFunction.apply(x, self.lambda_)
-    
+
     def set_lambda(self, lambda_: float):
         """Update lambda value during training."""
         self.lambda_ = lambda_
-    
+
     def get_lambda(self) -> float:
         """Get current lambda value."""
         return self.lambda_

@@ -24,7 +24,7 @@ class DomainDiscriminator(nn.Module):
         grl_lambda: Initial GRL lambda value
         use_sigmoid: Output sigmoid (True) or raw logits (False)
     """
-    
+
     def __init__(
         self,
         in_features: int,
@@ -34,9 +34,9 @@ class DomainDiscriminator(nn.Module):
         use_sigmoid: bool = True,
     ):
         super().__init__()
-        
+
         self.grl = GradientReversalLayer(lambda_=grl_lambda)
-        
+
         self.discriminator = nn.Sequential(
             nn.Linear(in_features, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
@@ -48,12 +48,12 @@ class DomainDiscriminator(nn.Module):
             nn.Dropout(0.5),
             nn.Linear(hidden_dim // 2, num_domains),
         )
-        
+
         self.use_sigmoid = use_sigmoid
         self.num_domains = num_domains
-        
+
         self._init_weights()
-    
+
     def _init_weights(self):
         """Initialize weights."""
         for m in self.modules():
@@ -64,9 +64,9 @@ class DomainDiscriminator(nn.Module):
             elif isinstance(m, nn.BatchNorm1d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
-    
+
     def forward(
-        self, 
+        self,
         x: torch.Tensor,
         apply_grl: bool = True,
     ) -> torch.Tensor:
@@ -82,19 +82,19 @@ class DomainDiscriminator(nn.Module):
         """
         if apply_grl:
             x = self.grl(x)
-        
+
         logits = self.discriminator(x)
-        
+
         if self.use_sigmoid and self.num_domains == 2:
             # Binary classification
             return torch.sigmoid(logits[:, 0:1])
-        
+
         return logits
-    
+
     def set_lambda(self, lambda_: float):
         """Update GRL lambda value."""
         self.grl.set_lambda(lambda_)
-    
+
     def get_lambda(self) -> float:
         """Get current GRL lambda."""
         return self.grl.get_lambda()
@@ -112,7 +112,7 @@ class MultiSourceDomainDiscriminator(nn.Module):
         num_sources: Number of source domains
         grl_lambda: Initial GRL lambda value
     """
-    
+
     def __init__(
         self,
         in_features: int,
@@ -121,9 +121,9 @@ class MultiSourceDomainDiscriminator(nn.Module):
         grl_lambda: float = 1.0,
     ):
         super().__init__()
-        
+
         self.num_sources = num_sources
-        
+
         # One discriminator per source domain
         self.discriminators = nn.ModuleList([
             DomainDiscriminator(
@@ -135,7 +135,7 @@ class MultiSourceDomainDiscriminator(nn.Module):
             )
             for _ in range(num_sources)
         ])
-    
+
     def forward(
         self,
         features: torch.Tensor,
@@ -154,12 +154,12 @@ class MultiSourceDomainDiscriminator(nn.Module):
             Domain predictions
         """
         return self.discriminators[source_idx](features, apply_grl=apply_grl)
-    
+
     def set_lambda(self, lambda_: float):
         """Update GRL lambda for all discriminators."""
         for disc in self.discriminators:
             disc.set_lambda(lambda_)
-    
+
     def get_lambda(self) -> float:
         """Get current GRL lambda (from first discriminator)."""
         return self.discriminators[0].get_lambda()

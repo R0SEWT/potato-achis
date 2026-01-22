@@ -4,6 +4,7 @@ Classifier Head
 Task-specific classification head with optional bottleneck.
 """
 
+
 import torch
 import torch.nn as nn
 
@@ -22,23 +23,23 @@ class ClassifierHead(nn.Module):
         dropout: Dropout probability
         use_bn: Use batch normalization in bottleneck
     """
-    
+
     def __init__(
         self,
         in_features: int,
         num_classes: int,
-        bottleneck_dim: Optional[int] = 256,
+        bottleneck_dim: int | None = 256,
         dropout: float = 0.5,
         use_bn: bool = True,
     ):
         super().__init__()
-        
+
         self.in_features = in_features
         self.num_classes = num_classes
         self.bottleneck_dim = bottleneck_dim
-        
+
         layers = []
-        
+
         # Optional bottleneck
         if bottleneck_dim is not None:
             layers.append(nn.Linear(in_features, bottleneck_dim))
@@ -48,19 +49,19 @@ class ClassifierHead(nn.Module):
             classifier_in = bottleneck_dim
         else:
             classifier_in = in_features
-        
+
         # Dropout
         if dropout > 0:
             layers.append(nn.Dropout(dropout))
-        
+
         self.bottleneck = nn.Sequential(*layers) if layers else nn.Identity()
-        
+
         # Final classifier
         self.classifier = nn.Linear(classifier_in, num_classes)
-        
+
         # Initialize weights
         self._init_weights()
-    
+
     def _init_weights(self):
         """Initialize weights using Xavier initialization."""
         for m in self.modules():
@@ -71,10 +72,10 @@ class ClassifierHead(nn.Module):
             elif isinstance(m, nn.BatchNorm1d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
-    
+
     def forward(
-        self, 
-        x: torch.Tensor, 
+        self,
+        x: torch.Tensor,
         return_features: bool = False
     ) -> torch.Tensor:
         """
@@ -90,14 +91,13 @@ class ClassifierHead(nn.Module):
         """
         features = self.bottleneck(x)
         logits = self.classifier(features)
-        
+
         if return_features:
             return logits, features
         return logits
-    
+
     def get_features(self, x: torch.Tensor) -> torch.Tensor:
         """Get bottleneck features without classification."""
         return self.bottleneck(x)
 
 
-from typing import Optional
