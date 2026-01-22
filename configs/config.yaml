@@ -10,7 +10,7 @@ defaults:
 experiment:
   name: "potato_disease_da"
   seed: 42
-  
+
 # Paths
 paths:
   data_dir: "./data"
@@ -24,6 +24,6 @@ training:
   num_workers: 4
   learning_rate: 0.001
   weight_decay: 0.0001
-  
+
 # Device
-device: "cuda"  # or "cpu"
+device: "cuda" # or "cpu"

@@ -10,7 +10,7 @@ source_domains:
       - "healthy"
       - "bacterial_wilt"
       - "virus"
-      
+
   - name: "local_commercial"
     path: "${paths.data_dir}/raw/local_commercial"
     # Same class structure
@@ -21,7 +21,7 @@ target_domain:
   path: "${paths.data_dir}/raw/andean_field"
   unlabeled_path: "${paths.data_dir}/raw/andean_field/unlabeled"
   labeled_path: "${paths.data_dir}/raw/andean_field/labeled"
-  
+
 # OOD classes for open-set evaluation
 ood_classes:
   - "frost_damage"
@@ -35,4 +35,4 @@ num_workers: 4
 
 # Augmentation
 use_andean_augmentation: true
-augmentation_strength: "medium"  # light, medium, strong
+augmentation_strength: "medium" # light, medium, strong

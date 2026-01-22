@@ -4,8 +4,8 @@
 type: "mdfan"
 backbone: "resnet50"
 pretrained: true
-num_classes: 5  # 5 potato disease types
-num_sources: 2  # Number of source domains
+num_classes: 5 # 5 potato disease types
+num_sources: 2 # Number of source domains
 
 # Architecture
 bottleneck_dim: 256
@@ -20,8 +20,8 @@ loss_weights:
   # classifier_alignment: 0.3  # DEFERRED
 
 # Training schedule
-stage1_epochs: 30  # Feature alignment
-stage2_epochs: 20  # Fine-tuning (optional classifier alignment)
+stage1_epochs: 30 # Feature alignment
+stage2_epochs: 20 # Fine-tuning (optional classifier alignment)
 
 # GRL lambda scheduling
 grl_lambda:

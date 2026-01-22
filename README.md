@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🥔 Potato-ACHIS
 
 **Multi-source Domain Feature Adaptation Network for Andean Potato Disease Classification**
@@ -212,3 +213,6 @@ If you use this code, please cite:
 ## 📄 License
 
 This project is licensed under the MIT License - see [LICENSE](LICENSE) for details
+=======
+# potato-achis
+>>>>>>> b1253d8 (Initial commit)

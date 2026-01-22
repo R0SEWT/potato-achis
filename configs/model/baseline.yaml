@@ -3,7 +3,7 @@
 type: "baseline"
 backbone: "mobilenet_v3_small"
 pretrained: true
-num_classes: 5  # 5 potato disease types
+num_classes: 5 # 5 potato disease types
 dropout: 0.5
 
 # Freeze backbone layers (0 = train all)
