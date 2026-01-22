@@ -115,28 +115,49 @@ class PotatoDataModule:
             classes: List of class names (auto-detected if None)
             class_filter: Filter to select only certain classes (e.g., "Potato", None for all)
         """
-        full_dataset = PotatoDiseaseDataset(
+        # Create dataset WITHOUT transform first to get indices
+        base_dataset = PotatoDiseaseDataset(
             root=source_dir,
-            transform=self.train_transform,
+            transform=None,  # No transform yet
             classes=classes,
             class_filter=class_filter,
         )
 
         # Store detected classes
-        self._detected_classes = full_dataset.classes
+        self._detected_classes = base_dataset.classes
 
-        # Split into train/val
-        val_size = int(len(full_dataset) * self.val_split)
-        train_size = len(full_dataset) - val_size
+        # Split indices
+        val_size = int(len(base_dataset) * self.val_split)
+        train_size = len(base_dataset) - val_size
 
-        self.train_dataset, self.val_dataset = random_split(
-            full_dataset,
-            [train_size, val_size],
-            generator=torch.Generator().manual_seed(42),
+        # Get indices for train/val split
+        indices = list(range(len(base_dataset)))
+        generator = torch.Generator().manual_seed(42)
+        perm = torch.randperm(len(indices), generator=generator).tolist()
+        train_indices = perm[:train_size]
+        val_indices = perm[train_size:]
+
+        # Create SEPARATE datasets with DIFFERENT transforms
+        train_dataset_full = PotatoDiseaseDataset(
+            root=source_dir,
+            transform=self.train_transform,  # Augmentation for training
+            classes=classes,
+            class_filter=class_filter,
+        )
+        val_dataset_full = PotatoDiseaseDataset(
+            root=source_dir,
+            transform=self.val_transform,  # No augmentation for validation
+            classes=classes,
+            class_filter=class_filter,
         )
 
-        # Store reference to apply different transforms
-        self._full_dataset = full_dataset
+        # Create subsets with the split indices
+        from torch.utils.data import Subset
+        self.train_dataset = Subset(train_dataset_full, train_indices)
+        self.val_dataset = Subset(val_dataset_full, val_indices)
+
+        # Store reference
+        self._full_dataset = base_dataset
     
     def setup_multi_source(
         self,
