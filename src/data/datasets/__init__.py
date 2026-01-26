@@ -8,7 +8,7 @@ from .multi_source_dataset import (
     MultiSourceIterator,
 )
 from .potato_dataset import PotatoDiseaseDataset
-from .unlabeled_dataset import UnlabeledDataset
+from .potato_dataset import UnlabeledDataset
 
 __all__ = [
     "BaseDataset",
