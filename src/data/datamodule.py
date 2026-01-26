@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
 
 from .datasets import MultiSourceDataset, PotatoDiseaseDataset, UnlabeledDataset
@@ -115,28 +115,36 @@ class PotatoDataModule:
             classes: List of class names (auto-detected if None)
             class_filter: Filter to select only certain classes (e.g., "Potato")
         """
-        full_dataset = PotatoDiseaseDataset(
+        train_dataset = PotatoDiseaseDataset(
             root=source_dir,
             transform=self.train_transform,
             classes=classes,
             class_filter=class_filter,
         )
-
-        # Store detected classes
-        self._detected_classes = full_dataset.classes
-
-        # Split into train/val
-        val_size = int(len(full_dataset) * self.val_split)
-        train_size = len(full_dataset) - val_size
-
-        self.train_dataset, self.val_dataset = random_split(
-            full_dataset,
-            [train_size, val_size],
-            generator=torch.Generator().manual_seed(42),
+        val_dataset = PotatoDiseaseDataset(
+            root=source_dir,
+            transform=self.val_transform,
+            classes=train_dataset.classes,
+            class_filter=class_filter,
         )
 
+        # Store detected classes
+        self._detected_classes = train_dataset.classes
+
+        # Split into train/val
+        val_size = int(len(train_dataset) * self.val_split)
+        train_size = len(train_dataset) - val_size
+        indices = torch.randperm(
+            len(train_dataset), generator=torch.Generator().manual_seed(42)
+        ).tolist()
+        train_indices = indices[:train_size]
+        val_indices = indices[train_size:]
+
+        self.train_dataset = Subset(train_dataset, train_indices)
+        self.val_dataset = Subset(val_dataset, val_indices)
+
         # Store reference to apply different transforms
-        self._full_dataset = full_dataset
+        self._full_dataset = train_dataset
     
     def setup_multi_source(
         self,
