@@ -168,36 +168,36 @@ class PotatoDataModule:
             classes: List of class names (auto-detected if None)
             class_filter: Filter to select only certain classes (e.g., "Potato")
         """
-        # Create dataset WITHOUT transform - transforms applied via TransformSubset
-        full_dataset = PotatoDiseaseDataset(
+        train_dataset = PotatoDiseaseDataset(
             root=source_dir,
             transform=None,  # Important: no transform here
             classes=classes,
             class_filter=class_filter,
         )
+        val_dataset = PotatoDiseaseDataset(
+            root=source_dir,
+            transform=self.val_transform,
+            classes=train_dataset.classes,
+            class_filter=class_filter,
+        )
 
         # Store detected classes
-        self._detected_classes = full_dataset.classes
-        self._full_dataset = full_dataset
+        self._detected_classes = train_dataset.classes
 
-        # Calculate split sizes
-        total_size = len(full_dataset)
-        val_size = int(total_size * self.val_split)
-        train_size = total_size - val_size
-
-        # Generate reproducible random indices
-        generator = torch.Generator().manual_seed(42)
-        indices = torch.randperm(total_size, generator=generator).tolist()
+        # Split into train/val
+        val_size = int(len(train_dataset) * self.val_split)
+        train_size = len(train_dataset) - val_size
+        indices = torch.randperm(
+            len(train_dataset), generator=torch.Generator().manual_seed(42)
+        ).tolist()
         train_indices = indices[:train_size]
         val_indices = indices[train_size:]
 
-        # Create subsets with DIFFERENT transforms
-        self.train_dataset = TransformSubset(
-            full_dataset, train_indices, self.train_transform
-        )
-        self.val_dataset = TransformSubset(
-            full_dataset, val_indices, self.val_transform
-        )
+        self.train_dataset = Subset(train_dataset, train_indices)
+        self.val_dataset = Subset(val_dataset, val_indices)
+
+        # Store reference to apply different transforms
+        self._full_dataset = train_dataset
     
     def setup_multi_source(
         self,

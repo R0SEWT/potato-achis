@@ -228,7 +228,7 @@ uv build                      # Build wheel/sdist
 
 ```bibtex
 @software{potato_achis_2025,
-  author = {R0SEWT},
+  author = {R0SEWT, Nakato156},
   title = {Potato-ACHIS: Multi-source Domain Adaptation for Andean Potato Disease Classification},
   year = {2025},
   url = {https://github.com/R0SEWT/potato-achis}
