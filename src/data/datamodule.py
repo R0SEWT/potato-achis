@@ -6,10 +6,10 @@ Handles dataset creation, transforms, and dataloaders.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
 from .datasets import MultiSourceDataset, PotatoDiseaseDataset, UnlabeledDataset
@@ -18,6 +18,59 @@ from .transforms import (
     get_train_transforms,
     get_val_transforms,
 )
+
+
+class TransformSubset(Dataset):
+    """
+    A subset of a dataset with a specific transform.
+    
+    Solves the problem of random_split sharing the same transform
+    for both train and val subsets.
+    
+    Args:
+        dataset: The full dataset (should have transform=None)
+        indices: Indices of samples to include
+        transform: Transform to apply to samples
+    """
+    
+    def __init__(
+        self,
+        dataset: Dataset,
+        indices: List[int],
+        transform: Optional[Callable] = None,
+    ):
+        self.dataset = dataset
+        self.indices = indices
+        self.transform = transform
+    
+    def __getitem__(self, idx: int):
+        sample = self.dataset[self.indices[idx]]
+        
+        # Handle both (image, label) and (image, label, domain) returns
+        if len(sample) == 2:
+            image, label = sample
+        else:
+            image, label, domain = sample
+        
+        if self.transform is not None:
+            image = self.transform(image)
+        
+        if len(sample) == 2:
+            return image, label
+        return image, label, domain
+    
+    def __len__(self) -> int:
+        return len(self.indices)
+    
+    @property
+    def classes(self) -> List[str]:
+        """Forward classes property from underlying dataset."""
+        return self.dataset.classes
+    
+    @property
+    def class_to_idx(self) -> Dict[str, int]:
+        """Forward class_to_idx property from underlying dataset."""
+        return self.dataset.class_to_idx
 
 
 class PotatoDataModule:
@@ -117,7 +170,7 @@ class PotatoDataModule:
         """
         train_dataset = PotatoDiseaseDataset(
             root=source_dir,
-            transform=self.train_transform,
+            transform=None,  # Important: no transform here
             classes=classes,
             class_filter=class_filter,
         )
