@@ -5,8 +5,8 @@ Central data management for potato disease classification.
 Handles dataset creation, transforms, and dataloaders.
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -23,52 +23,52 @@ from .transforms import (
 class TransformSubset(Dataset):
     """
     A subset of a dataset with a specific transform.
-    
+
     Solves the problem of random_split sharing the same transform
     for both train and val subsets.
-    
+
     Args:
         dataset: The full dataset (should have transform=None)
         indices: Indices of samples to include
         transform: Transform to apply to samples
     """
-    
+
     def __init__(
         self,
         dataset: Dataset,
-        indices: List[int],
-        transform: Optional[Callable] = None,
+        indices: list[int],
+        transform: Callable | None = None,
     ):
         self.dataset = dataset
         self.indices = indices
         self.transform = transform
-    
+
     def __getitem__(self, idx: int):
         sample = self.dataset[self.indices[idx]]
-        
+
         # Handle both (image, label) and (image, label, domain) returns
         if len(sample) == 2:
             image, label = sample
         else:
             image, label, domain = sample
-        
+
         if self.transform is not None:
             image = self.transform(image)
-        
+
         if len(sample) == 2:
             return image, label
         return image, label, domain
-    
+
     def __len__(self) -> int:
         return len(self.indices)
-    
+
     @property
-    def classes(self) -> List[str]:
+    def classes(self) -> list[str]:
         """Forward classes property from underlying dataset."""
         return self.dataset.classes
-    
+
     @property
-    def class_to_idx(self) -> Dict[str, int]:
+    def class_to_idx(self) -> dict[str, int]:
         """Forward class_to_idx property from underlying dataset."""
         return self.dataset.class_to_idx
 
@@ -76,13 +76,13 @@ class TransformSubset(Dataset):
 class PotatoDataModule:
     """
     Data module for potato disease classification.
-    
+
     Handles:
     - Loading source and target datasets
     - Creating train/val/test splits
     - Setting up dataloaders
     - Multi-source domain adaptation setup
-    
+
     Args:
         data_dir: Root data directory
         batch_size: Batch size for dataloaders
@@ -92,7 +92,7 @@ class PotatoDataModule:
         use_andean_aug: Use Andean field augmentations
         aug_strength: Augmentation strength
     """
-    
+
     def __init__(
         self,
         data_dir: str = "./data",
@@ -110,12 +110,12 @@ class PotatoDataModule:
         self.val_split = val_split
         self.use_andean_aug = use_andean_aug
         self.aug_strength = aug_strength
-        
+
         # Datasets (initialized in setup)
         self.train_dataset = None
         self.val_dataset = None
         self.test_dataset = None
-        
+
         # Multi-source datasets
         self.source_datasets = []
         self.target_dataset = None
@@ -151,14 +151,14 @@ class PotatoDataModule:
                 image_size=self.image_size,
                 strength=self.aug_strength,
             )
-        
+
         self.val_transform = get_val_transforms(image_size=self.image_size)
 
     def setup_single_source(
         self,
         source_dir: str,
-        classes: Optional[List[str]] = None,
-        class_filter: Optional[str] = "Potato",
+        classes: list[str] | None = None,
+        class_filter: str | None = "Potato",
     ):
         """
         Setup for single-source training (baseline).
@@ -168,47 +168,51 @@ class PotatoDataModule:
             classes: List of class names (auto-detected if None)
             class_filter: Filter to select only certain classes (e.g., "Potato")
         """
-        train_dataset = PotatoDiseaseDataset(
+        # Single dataset without transforms — splits get their own transforms
+        full_dataset = PotatoDiseaseDataset(
             root=source_dir,
-            transform=None,  # Important: no transform here
+            transform=None,
             classes=classes,
-            class_filter=class_filter,
-        )
-        val_dataset = PotatoDiseaseDataset(
-            root=source_dir,
-            transform=self.val_transform,
-            classes=train_dataset.classes,
             class_filter=class_filter,
         )
 
         # Store detected classes
-        self._detected_classes = train_dataset.classes
+        self._detected_classes = full_dataset.classes
 
-        # Split into train/val
-        val_size = int(len(train_dataset) * self.val_split)
-        train_size = len(train_dataset) - val_size
+        # Split into train/val (deterministic, non-overlapping)
+        val_size = int(len(full_dataset) * self.val_split)
+        train_size = len(full_dataset) - val_size
         indices = torch.randperm(
-            len(train_dataset), generator=torch.Generator().manual_seed(42)
+            len(full_dataset), generator=torch.Generator().manual_seed(42)
         ).tolist()
         train_indices = indices[:train_size]
         val_indices = indices[train_size:]
 
-        self.train_dataset = Subset(train_dataset, train_indices)
-        self.val_dataset = Subset(val_dataset, val_indices)
+        # Use TransformSubset so train/val get different transforms
+        self.train_dataset = TransformSubset(
+            full_dataset,
+            train_indices,
+            transform=self.train_transform,
+        )
+        self.val_dataset = TransformSubset(
+            full_dataset,
+            val_indices,
+            transform=self.val_transform,
+        )
 
-        # Store reference to apply different transforms
-        self._full_dataset = train_dataset
-    
+        # Store reference
+        self._full_dataset = full_dataset
+
     def setup_multi_source(
         self,
-        source_dirs: List[str],
+        source_dirs: list[str],
         target_dir: str,
-        source_names: Optional[List[str]] = None,
-        classes: Optional[List[str]] = None,
+        source_names: list[str] | None = None,
+        classes: list[str] | None = None,
     ):
         """
         Setup for multi-source domain adaptation.
-        
+
         Args:
             source_dirs: List of source dataset directories
             target_dir: Target dataset directory
@@ -225,26 +229,26 @@ class PotatoDataModule:
                 domain_label=i,  # Source domain labels: 0, 1, ...
             )
             self.source_datasets.append(dataset)
-        
+
         # Create target dataset (unlabeled)
         self.target_dataset = UnlabeledDataset(
             root=target_dir,
             transform=self.train_transform,
             domain_label=len(source_dirs),  # Target domain label
         )
-        
+
         # Create multi-source wrapper
         self.multi_source = MultiSourceDataset(
             source_datasets=self.source_datasets,
             target_dataset=self.target_dataset,
             source_names=source_names,
         )
-    
+
     def get_train_loader(self) -> DataLoader:
         """Get training dataloader (single-source)."""
         if self.train_dataset is None:
             raise RuntimeError("Call setup_single_source() first")
-        
+
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
@@ -253,12 +257,12 @@ class PotatoDataModule:
             pin_memory=True,
             drop_last=True,
         )
-    
+
     def get_val_loader(self) -> DataLoader:
         """Get validation dataloader."""
         if self.val_dataset is None:
             raise RuntimeError("Call setup_single_source() first")
-        
+
         return DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,
@@ -266,43 +270,43 @@ class PotatoDataModule:
             num_workers=self.num_workers,
             pin_memory=True,
         )
-    
-    def get_multi_source_loaders(self) -> Tuple[List[DataLoader], DataLoader]:
+
+    def get_multi_source_loaders(self) -> tuple[list[DataLoader], DataLoader]:
         """
         Get dataloaders for multi-source domain adaptation.
-        
+
         Returns:
             Tuple of (source_loaders, target_loader)
         """
         if self.multi_source is None:
             raise RuntimeError("Call setup_multi_source() first")
-        
+
         return self.multi_source.get_dataloaders(
             batch_size=self.batch_size,
             num_workers=self.num_workers,
         )
-    
+
     def get_test_loader(
         self,
         test_dir: str,
-        classes: Optional[List[str]] = None,
+        classes: list[str] | None = None,
     ) -> DataLoader:
         """
         Get test dataloader for evaluation.
-        
+
         Args:
             test_dir: Test dataset directory
             classes: Class names (use source classes if None)
         """
         if classes is None and self.source_datasets:
             classes = self.source_datasets[0].classes
-        
+
         test_dataset = PotatoDiseaseDataset(
             root=test_dir,
             transform=self.val_transform,
             classes=classes,
         )
-        
+
         return DataLoader(
             test_dataset,
             batch_size=self.batch_size,
@@ -323,7 +327,7 @@ class PotatoDataModule:
         return 5  # Default
 
     @property
-    def classes(self) -> List[str]:
+    def classes(self) -> list[str]:
         """Get class names."""
         if hasattr(self, "_detected_classes"):
             return self._detected_classes
