@@ -1,7 +1,6 @@
 """Tests for gradient reversal layer and lambda scheduling."""
 
-import math
-
+import pytest
 import torch
 
 from src.models.components.gradient_reversal import (
@@ -29,7 +28,6 @@ class TestGradientReversalLayer:
         loss = y.sum()
         loss.backward()
 
-        # Gradient of sum w.r.t. x is all-ones, but GRL negates it
         expected = -torch.ones_like(x)
         assert torch.allclose(x.grad, expected)
 
@@ -52,10 +50,17 @@ class TestGradientReversalLayer:
         y.sum().backward()
         assert torch.allclose(x.grad, torch.zeros_like(x))
 
-    def test_set_lambda(self):
+    def test_set_lambda_affects_gradients(self):
+        """set_lambda should change the scaling used in backward pass."""
         grl = GradientReversalLayer(lambda_=1.0)
         grl.set_lambda(0.3)
-        assert grl.get_lambda() == 0.3
+        assert grl.get_lambda() == pytest.approx(0.3)
+
+        x = torch.randn(4, 8, requires_grad=True)
+        y = grl(x)
+        y.sum().backward()
+        expected = -0.3 * torch.ones_like(x)
+        assert torch.allclose(x.grad, expected)
 
     def test_works_in_computation_graph(self):
         """GRL should work with linear layers in a graph."""
@@ -68,7 +73,6 @@ class TestGradientReversalLayer:
         loss = reversed_features.sum()
         loss.backward()
 
-        # Linear layer should have gradients (reversed)
         assert linear.weight.grad is not None
 
 
@@ -76,19 +80,28 @@ class TestLambdaSchedule:
     """Tests for GRL lambda scheduling functions."""
 
     def test_warmup_starts_at_initial(self):
-        assert get_lambda_schedule(0, 50, initial=0.0, final=1.0, warmup_epochs=10) == 0.0
+        val = get_lambda_schedule(0, 50, initial=0.0, final=1.0, warmup_epochs=10)
+        assert val == pytest.approx(0.0)
 
     def test_warmup_reaches_final(self):
         val = get_lambda_schedule(10, 50, initial=0.0, final=1.0, warmup_epochs=10)
-        assert val == 1.0
+        assert val == pytest.approx(1.0)
 
     def test_midway_warmup(self):
         val = get_lambda_schedule(5, 50, initial=0.0, final=1.0, warmup_epochs=10)
-        assert abs(val - 0.5) < 1e-6
+        assert val == pytest.approx(0.5)
 
     def test_after_warmup_stays_at_final(self):
         val = get_lambda_schedule(30, 50, initial=0.0, final=1.0, warmup_epochs=10)
-        assert val == 1.0
+        assert val == pytest.approx(1.0)
+
+    def test_epoch_beyond_max_stays_at_final(self):
+        val = get_lambda_schedule(60, 50, initial=0.0, final=1.0, warmup_epochs=10)
+        assert val == pytest.approx(1.0)
+
+    def test_zero_warmup_immediately_at_final(self):
+        val = get_lambda_schedule(0, 50, initial=0.0, final=1.0, warmup_epochs=0)
+        assert val == pytest.approx(1.0)
 
     def test_dann_schedule_bounds(self):
         """DANN schedule should go from ~0 to ~1."""

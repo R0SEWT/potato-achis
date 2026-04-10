@@ -11,27 +11,39 @@ class TestBaselineModel:
     """Tests for BaselineModel."""
 
     def test_forward_shape(self):
-        model = create_model("baseline", backbone="mobilenet_v3_small", num_classes=5)
+        model = create_model(
+            "baseline", backbone="mobilenet_v3_small",
+            num_classes=5, pretrained=False,
+        )
         x = torch.randn(2, 3, 224, 224)
         logits = model(x)
         assert logits.shape == (2, 5)
 
     def test_return_features(self):
-        model = create_model("baseline", backbone="mobilenet_v3_small", num_classes=5)
+        model = create_model(
+            "baseline", backbone="mobilenet_v3_small",
+            num_classes=5, pretrained=False,
+        )
         x = torch.randn(2, 3, 224, 224)
         logits, features = model(x, return_features=True)
         assert logits.shape == (2, 5)
         assert features.shape[0] == 2
 
     def test_extract_features(self):
-        model = create_model("baseline", backbone="mobilenet_v3_small", num_classes=5)
+        model = create_model(
+            "baseline", backbone="mobilenet_v3_small",
+            num_classes=5, pretrained=False,
+        )
         x = torch.randn(2, 3, 224, 224)
         features = model.extract_features(x)
         assert features.shape[0] == 2
         assert features.dim() == 2
 
     def test_num_classes_attribute(self):
-        model = create_model("baseline", backbone="mobilenet_v3_small", num_classes=3)
+        model = create_model(
+            "baseline", backbone="mobilenet_v3_small",
+            num_classes=3, pretrained=False,
+        )
         assert model.num_classes == 3
 
 
@@ -41,14 +53,14 @@ class TestMDFANModel:
     def test_creation(self):
         model = create_model(
             "mdfan", backbone="mobilenet_v3_small",
-            num_classes=5, num_sources=2,
+            num_classes=5, num_sources=2, pretrained=False,
         )
         assert model is not None
 
     def test_forward_shape(self):
         model = create_model(
             "mdfan", backbone="mobilenet_v3_small",
-            num_classes=5, num_sources=2,
+            num_classes=5, num_sources=2, pretrained=False,
         )
         x = torch.randn(2, 3, 224, 224)
         logits = model(x)
@@ -63,9 +75,14 @@ class TestModelFactory:
             ModelFactory.create({"type": "nonexistent"})
 
     def test_baseline_default(self):
-        model = ModelFactory.create({"type": "baseline", "num_classes": 5})
+        model = ModelFactory.create({
+            "type": "baseline", "num_classes": 5, "pretrained": False,
+        })
         assert isinstance(model, BaselineModel)
 
     def test_create_model_convenience(self):
-        model = create_model("baseline", backbone="mobilenet_v3_small", num_classes=5)
+        model = create_model(
+            "baseline", backbone="mobilenet_v3_small",
+            num_classes=5, pretrained=False,
+        )
         assert isinstance(model, BaselineModel)

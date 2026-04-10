@@ -1,5 +1,6 @@
 """Tests for augmentation and transform pipelines."""
 
+import pytest
 import torch
 from PIL import Image
 
@@ -37,8 +38,6 @@ class TestStandardTransforms:
             assert tensor.shape == (3, 128, 128)
 
     def test_invalid_strength_raises(self):
-        import pytest
-
         with pytest.raises(ValueError, match="Unknown strength"):
             get_train_transforms(strength="extreme")
 
@@ -60,6 +59,20 @@ class TestDenormalize:
         recovered = denorm(normalized)
         assert torch.allclose(original, recovered, atol=1e-5)
 
+    def test_batched_roundtrip(self):
+        """Denormalize should work correctly on batched (N, C, H, W) inputs."""
+        mean = (0.485, 0.456, 0.406)
+        std = (0.229, 0.224, 0.225)
+        denorm = Denormalize(mean=mean, std=std)
+
+        originals = torch.rand(4, 3, 32, 32)
+        mean_t = torch.tensor(mean).view(1, 3, 1, 1)
+        std_t = torch.tensor(std).view(1, 3, 1, 1)
+        normalized = (originals - mean_t) / std_t
+
+        recovered = denorm(normalized)
+        assert torch.allclose(originals, recovered, atol=1e-5)
+
 
 class TestAndeanFieldAugmentation:
     """Tests for Andean-specific augmentations."""
@@ -78,8 +91,6 @@ class TestAndeanFieldAugmentation:
             assert y.shape == x.shape
 
     def test_invalid_intensity_raises(self):
-        import pytest
-
         with pytest.raises(ValueError, match="Unknown intensity"):
             AndeanFieldAugmentation(intensity="ultra")
 
