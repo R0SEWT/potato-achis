@@ -5,7 +5,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-import torch
 from PIL import Image
 
 from src.data.datamodule import PotatoDataModule, TransformSubset
@@ -59,16 +58,24 @@ class TestTrainValSplit:
         )
         dm.setup_single_source(fake_dataset_dir, class_filter=None)
 
-        total = len(dm._full_dataset)
+        total = len(dm.train_dataset.dataset)
         covered = len(dm.train_dataset) + len(dm.val_dataset)
         assert covered == total
 
     def test_split_is_deterministic(self, fake_dataset_dir):
         """Same seed should produce same split."""
-        dm1 = PotatoDataModule(data_dir=fake_dataset_dir, num_workers=0, use_andean_aug=False)
+        dm1 = PotatoDataModule(
+            data_dir=fake_dataset_dir,
+            num_workers=0,
+            use_andean_aug=False,
+        )
         dm1.setup_single_source(fake_dataset_dir, class_filter=None)
 
-        dm2 = PotatoDataModule(data_dir=fake_dataset_dir, num_workers=0, use_andean_aug=False)
+        dm2 = PotatoDataModule(
+            data_dir=fake_dataset_dir,
+            num_workers=0,
+            use_andean_aug=False,
+        )
         dm2.setup_single_source(fake_dataset_dir, class_filter=None)
 
         assert dm1.train_dataset.indices == dm2.train_dataset.indices
@@ -99,11 +106,15 @@ class TestTrainValSplit:
         )
         dm.setup_single_source(fake_dataset_dir, class_filter=None)
 
-        assert dm._full_dataset.transform is None
+        assert dm.train_dataset.dataset.transform is None
 
     def test_classes_detected(self, fake_dataset_dir):
         """Classes should be auto-detected from directory structure."""
-        dm = PotatoDataModule(data_dir=fake_dataset_dir, num_workers=0, use_andean_aug=False)
+        dm = PotatoDataModule(
+            data_dir=fake_dataset_dir,
+            num_workers=0,
+            use_andean_aug=False,
+        )
         dm.setup_single_source(fake_dataset_dir, class_filter=None)
 
         assert set(dm.classes) == {"early_blight", "late_blight", "healthy"}
