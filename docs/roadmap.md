@@ -17,7 +17,7 @@ Last updated: 2026-04-09
 
 **Priority: high**
 
-`tests/` is empty. Minimum coverage needed before adding features.
+`tests/` has no test files yet. Minimum coverage needed before adding features.
 
 - [ ] `test_mmd_loss.py` — MMD loss with RBF kernel
 - [ ] `test_gradient_reversal.py` — GRL forward/backward behavior

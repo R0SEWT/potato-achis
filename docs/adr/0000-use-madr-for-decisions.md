@@ -14,7 +14,7 @@ We need a lightweight way to document architecture decisions versioned alongside
 
 ## Decision
 
-Use [MADR](https://adr.github.io/madr/) (Markdown Any Decision Records) stored in `docs/adr/`. Each record follows the format: Status, Date, Context, Decision, Consequences.
+Use [MADR](https://adr.github.io/madr/) (Markdown Architectural Decision Records) stored in `docs/adr/`. Each record follows the format: Status, Date, Context, Decision, Consequences.
 
 Numbering: `NNNN-slug.md` (zero-padded, sequential).
 

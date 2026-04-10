@@ -46,7 +46,7 @@ make train-mdfan
 - **Entry points**: `src/train.py` (argparse CLI) and `src/eval.py`. Also registered as `potato-train` / `potato-eval` console scripts.
 - **Model factory**: `src/models/model.py` — `create_model()` dispatches to `BaselineModel` or `MDFAN` via `ModelFactory`.
 - **Backbones**: `src/models/backbones/backbone_factory.py` wraps `timm` to create MobileNetV3 or ResNet50 feature extractors.
-- **MDFAN components** (`src/models/mdfan/`): `FeatureExtractor` (bottleneck), `DomainDiscriminator` (with GRL), `ClassifierAlignment`, assembled by `MDAFNModel`.
+- **MDFAN components** (`src/models/mdfan/`): `FeatureExtractor` (bottleneck), `DomainDiscriminator` (with GRL), `ClassifierAlignment`, assembled by `MDFAN`.
 - **Data pipeline**: `src/data/datamodule.py` (`PotatoDataModule`) handles single-source and multi-source setups. `MultiSourceIterator` synchronizes loaders during MDFAN training.
 - **Losses**: `src/losses/mmd_loss.py` (MMD with RBF kernel), `src/losses/domain_adversarial_loss.py` (classification + multi-source domain loss).
 - **Andean augmentations**: `src/data/transforms/andean_transforms.py` — specialized transforms simulating highland lighting/conditions.
