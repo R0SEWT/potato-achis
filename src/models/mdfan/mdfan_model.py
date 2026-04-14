@@ -19,6 +19,7 @@ import torch.nn.functional as F
 
 from ..backbones import BackboneFactory
 from ..heads import ClassifierHead
+from .classifier_alignment import ClassifierAlignment
 from .domain_discriminator import MultiSourceDomainDiscriminator
 from .feature_extractor import FeatureExtractor
 
@@ -26,11 +27,11 @@ from .feature_extractor import FeatureExtractor
 class MDFAN(nn.Module):
     """
     Multi-source Domain Feature Adaptation Network.
-    
+
     Architecture:
         Shared Backbone -> Feature Extractor -> [Domain Discriminators]
                                              -> [Source Classifiers]
-    
+
     Args:
         backbone_name: Backbone network name
         num_classes: Number of disease classes
@@ -39,6 +40,7 @@ class MDFAN(nn.Module):
         bottleneck_dim: Feature bottleneck dimension
         hidden_dim: Domain discriminator hidden dimension
         dropout: Dropout probability
+        classifier_alignment_loss_type: Alignment loss type ('l1', 'l2', 'kl')
     """
 
     def __init__(
@@ -50,6 +52,7 @@ class MDFAN(nn.Module):
         bottleneck_dim: int = 256,
         hidden_dim: int = 1024,
         dropout: float = 0.5,
+        classifier_alignment_loss_type: str = "l1",
     ):
         super().__init__()
 
@@ -79,15 +82,17 @@ class MDFAN(nn.Module):
         )
 
         # Source-specific classifiers (for multi-source combination)
-        self.source_classifiers = nn.ModuleList([
-            ClassifierHead(
-                in_features=bottleneck_dim,
-                num_classes=num_classes,
-                bottleneck_dim=None,  # No additional bottleneck
-                dropout=dropout,
-            )
-            for _ in range(num_sources)
-        ])
+        self.source_classifiers = nn.ModuleList(
+            [
+                ClassifierHead(
+                    in_features=bottleneck_dim,
+                    num_classes=num_classes,
+                    bottleneck_dim=None,  # No additional bottleneck
+                    dropout=dropout,
+                )
+                for _ in range(num_sources)
+            ]
+        )
 
         # Combined classifier for inference
         self.combined_classifier = ClassifierHead(
@@ -95,6 +100,12 @@ class MDFAN(nn.Module):
             num_classes=num_classes,
             bottleneck_dim=None,
             dropout=dropout,
+        )
+
+        # Optional Stage 2 alignment loss (parameter-free module)
+        self.classifier_alignment = ClassifierAlignment(
+            num_sources=num_sources,
+            loss_type=classifier_alignment_loss_type,
         )
 
     def extract_features(self, x: torch.Tensor) -> torch.Tensor:
@@ -109,13 +120,13 @@ class MDFAN(nn.Module):
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass for inference.
-        
+
         Uses combined classifier for predictions.
-        
+
         Args:
             x: Input images of shape (B, C, H, W)
             return_features: Also return bottleneck features
-            
+
         Returns:
             Logits of shape (B, num_classes)
         """
@@ -133,11 +144,11 @@ class MDFAN(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward pass for a source domain sample.
-        
+
         Args:
             x: Source domain images
             source_idx: Index of source domain
-            
+
         Returns:
             Tuple of (class_logits, domain_pred, features)
         """
@@ -153,10 +164,10 @@ class MDFAN(nn.Module):
     ) -> tuple[list[torch.Tensor], list[torch.Tensor], torch.Tensor]:
         """
         Forward pass for target domain samples.
-        
+
         Args:
             x: Target domain images
-            
+
         Returns:
             Tuple of (class_logits_list, domain_preds_list, features)
         """
@@ -164,14 +175,12 @@ class MDFAN(nn.Module):
 
         # Get predictions from all source classifiers
         class_logits_list = [
-            classifier(features)
-            for classifier in self.source_classifiers
+            classifier(features) for classifier in self.source_classifiers
         ]
 
         # Get domain predictions from all discriminators
         domain_preds_list = [
-            self.domain_discriminators(features, i)
-            for i in range(self.num_sources)
+            self.domain_discriminators(features, i) for i in range(self.num_sources)
         ]
 
         return class_logits_list, domain_preds_list, features
@@ -181,41 +190,49 @@ class MDFAN(nn.Module):
         source_images: list[torch.Tensor],
         source_labels: list[torch.Tensor],
         target_images: torch.Tensor,
+        compute_alignment_loss: bool = False,
     ) -> dict[str, torch.Tensor]:
         """
         Complete forward pass for training.
-        
+
         Args:
             source_images: List of source domain image batches
             source_labels: List of source domain label batches
             target_images: Target domain image batch
-            
+
         Returns:
             Dictionary with all intermediate outputs
         """
         outputs = {
-            'source_features': [],
-            'source_logits': [],
-            'source_domain_preds': [],
-            'target_features': None,
-            'target_logits': [],
-            'target_domain_preds': [],
+            "source_features": [],
+            "source_logits": [],
+            "source_domain_preds": [],
+            "target_features": None,
+            "target_logits": [],
+            "target_domain_preds": [],
+            "align_loss": None,
         }
 
         # Process each source domain
-        for i, (src_img, src_lbl) in enumerate(zip(source_images, source_labels)):
+        for i, (src_img, _src_lbl) in enumerate(zip(source_images, source_labels)):
             logits, domain_pred, features = self.forward_source(src_img, i)
-            outputs['source_features'].append(features)
-            outputs['source_logits'].append(logits)
-            outputs['source_domain_preds'].append(domain_pred)
+            outputs["source_features"].append(features)
+            outputs["source_logits"].append(logits)
+            outputs["source_domain_preds"].append(domain_pred)
 
         # Process target domain
         target_logits, target_domain_preds, target_features = self.forward_target(
             target_images
         )
-        outputs['target_features'] = target_features
-        outputs['target_logits'] = target_logits
-        outputs['target_domain_preds'] = target_domain_preds
+        outputs["target_features"] = target_features
+        outputs["target_logits"] = target_logits
+        outputs["target_domain_preds"] = target_domain_preds
+
+        if compute_alignment_loss:
+            target_probs = [F.softmax(logits, dim=1) for logits in target_logits]
+            outputs["align_loss"] = self.classifier_alignment(target_probs)
+        else:
+            outputs["align_loss"] = target_features.new_tensor(0.0)
 
         return outputs
 
@@ -226,11 +243,11 @@ class MDFAN(nn.Module):
     ) -> torch.Tensor:
         """
         Get combined prediction from all source classifiers.
-        
+
         Args:
             x: Input images
             method: Combination method ('average', 'weighted', 'voting')
-            
+
         Returns:
             Combined predictions
         """

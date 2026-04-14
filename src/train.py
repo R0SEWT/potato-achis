@@ -33,7 +33,6 @@ from src.losses import MMDLoss
 from src.losses.domain_adversarial_loss import ClassificationLoss, MultiSourceDomainLoss
 from src.models import create_model
 from src.models.components.gradient_reversal import get_lambda_schedule
-from src.models.mdfan import ClassifierAlignment
 from src.utils.metrics import MetricTracker, compute_accuracy, compute_f1
 
 # Setup logging
@@ -208,7 +207,6 @@ def train_mdfan_epoch(
     criterion_cls: nn.Module,
     criterion_domain: nn.Module,
     criterion_mmd: nn.Module,
-    criterion_align: nn.Module | None,
     optimizer: optim.Optimizer,
     device: str,
     lambda_adv: float,
@@ -255,7 +253,12 @@ def train_mdfan_epoch(
         target_images = target_batch[0].to(device)
 
         # Forward pass
-        outputs = model.forward_train(source_images, source_labels, target_images)
+        outputs = model.forward_train(
+            source_images,
+            source_labels,
+            target_images,
+            compute_alignment_loss=lambda_align != 0.0,
+        )
 
         # Classification loss (source only)
         cls_loss = torch.tensor(0.0, device=device)
@@ -284,14 +287,7 @@ def train_mdfan_epoch(
             outputs["target_features"],
         )
 
-        # Classifier alignment loss (target only; Stage 2)
-        if criterion_align is not None and lambda_align != 0.0:
-            target_probs = [
-                torch.softmax(logits, dim=1) for logits in outputs["target_logits"]
-            ]
-            align_loss = criterion_align(target_probs)
-        else:
-            align_loss = torch.tensor(0.0, device=device)
+        align_loss = outputs["align_loss"]
 
         # Total loss
         total_loss = (
@@ -496,7 +492,6 @@ def main():
     if args.model == "mdfan":
         criterion_domain = MultiSourceDomainLoss(num_sources=len(args.source_dirs))
         criterion_mmd = MMDLoss(kernel_type="rbf")
-        criterion_align = ClassifierAlignment(num_sources=len(args.source_dirs))
 
     # Optimizer
     optimizer = optim.AdamW(
@@ -537,7 +532,6 @@ def main():
                 criterion_cls,
                 criterion_domain,
                 criterion_mmd,
-                criterion_align,
                 optimizer,
                 device,
                 lambda_adv=args.lambda_adv,

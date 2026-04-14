@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-10
+Last updated: 2026-04-14
 
 ## Completed
 
@@ -19,13 +19,12 @@ Last updated: 2026-04-10
 
 **Priority: medium**
 
-Module scaffolded at `src/models/mdfan/classifier_alignment.py`. Needs integration.
-
-- [ ] Wire `ClassifierAlignment` into `MDFAN.forward_train()`
+Module implemented at `src/models/mdfan/classifier_alignment.py` and integrated into training.
 - [x] Add `--lambda_align` flag to `src/train.py`
 - [x] Add unit tests for `ClassifierAlignment`
-- [ ] Uncomment `classifier_alignment: 0.3` in `configs/model/mdfan.yaml`
-- [ ] ADR: document alignment strategy choice (L1 vs KL vs MCD)
+- [x] Wire `ClassifierAlignment` into `MDFAN.forward_train()`
+- [x] Uncomment `classifier_alignment: 0.3` in `configs/model/mdfan.yaml`
+- [x] ADR: document alignment strategy choice (L1 vs KL vs MCD)
 
 ### 2. Grad-CAM in evaluation
 
