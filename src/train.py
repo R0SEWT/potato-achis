@@ -60,12 +60,21 @@ def parse_args():
     parser.add_argument(
         "--num_classes", type=int, default=5, help="Number of disease classes"
     )
-    parser.add_argument(
+    pretrained_group = parser.add_mutually_exclusive_group()
+    pretrained_group.add_argument(
         "--pretrained",
+        dest="pretrained",
         action="store_true",
-        default=True,
-        help="Use pretrained backbone",
+        help="Use pretrained backbone weights (default)",
     )
+    pretrained_group.add_argument(
+        "--no-pretrained",
+        "--no_pretrained",
+        dest="pretrained",
+        action="store_false",
+        help="Disable pretrained backbone weights",
+    )
+    parser.set_defaults(pretrained=True)
 
     # Data
     parser.add_argument(
@@ -86,12 +95,22 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--image_size", type=int, default=224)
-    parser.add_argument(
+    andean_aug_group = parser.add_mutually_exclusive_group()
+    andean_aug_group.add_argument(
+        "--use-andean-aug",
         "--use_andean_aug",
+        dest="use_andean_aug",
         action="store_true",
-        default=True,
-        help="Use Andean field augmentations",
+        help="Use Andean field augmentations (default)",
     )
+    andean_aug_group.add_argument(
+        "--no-andean-aug",
+        "--no_andean_aug",
+        dest="use_andean_aug",
+        action="store_false",
+        help="Disable Andean field augmentations",
+    )
+    parser.set_defaults(use_andean_aug=True)
 
     # Training
     parser.add_argument("--epochs", type=int, default=50)

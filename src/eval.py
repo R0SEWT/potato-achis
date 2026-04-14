@@ -40,6 +40,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+_GRADCAM_TARGET_LAYER_BY_BACKBONE: dict[str, str] = {
+    "mobilenet_v3_small": "backbone.backbone.conv_head",
+    "mobilenet_v3_large": "backbone.backbone.conv_head",
+    "resnet18": "backbone.backbone.layer4",
+    "resnet34": "backbone.backbone.layer4",
+    "resnet50": "backbone.backbone.layer4",
+    "resnet101": "backbone.backbone.layer4",
+}
+
+
+def get_default_gradcam_target_layer(backbone: str) -> str:
+    try:
+        return _GRADCAM_TARGET_LAYER_BY_BACKBONE[backbone]
+    except KeyError as exc:
+        supported = sorted(_GRADCAM_TARGET_LAYER_BY_BACKBONE)
+        raise ValueError(
+            f"Unsupported backbone '{backbone}' for Grad-CAM. Supported: {supported}"
+        ) from exc
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate potato disease classifier")
 
@@ -366,20 +386,23 @@ def main():
     if args.gradcam:
         logger.info("\n=== Generating Grad-CAM ===")
 
-        if args.backbone.startswith("resnet"):
-            target_layer = "backbone.backbone.layer4"
-        else:
-            target_layer = "backbone.backbone.conv_head"
+        target_layer = get_default_gradcam_target_layer(args.backbone)
 
         images, _ = next(iter(test_loader))
         images = images.to(device)
 
-        visualize_gradcam(
-            model,
-            images,
-            target_layer=target_layer,
-            save_path=str(output_dir / "gradcam.png"),
-        )
+        try:
+            visualize_gradcam(
+                model,
+                images,
+                target_layer=target_layer,
+                save_path=str(output_dir / "gradcam.png"),
+            )
+        except AttributeError as exc:
+            raise AttributeError(
+                f"Grad-CAM target_layer '{target_layer}' could not be resolved for backbone '{args.backbone}'. "
+                "If you added a new backbone, extend the mapping in eval.py."
+            ) from exc
         logger.info(f"Saved Grad-CAM to {output_dir / 'gradcam.png'}")
 
     # Save results
