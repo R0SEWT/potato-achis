@@ -255,10 +255,12 @@ uv build                      # Build wheel/sdist
 - [x] OOD detection (MSP, entropy, energy)
 - [x] Andean field augmentations
 - [x] uv package management
-- [ ] Classifier alignment (Stage 2)
-- [ ] Grad-CAM visualization
-- [ ] W&B integration
-- [ ] ONNX export
+- [x] Classifier alignment (Stage 2)
+- [x] Grad-CAM visualization
+- [x] W&B integration
+- [x] ONNX export
+
+Detailed roadmap: see [docs/roadmap.md](docs/roadmap.md)
 
 ## 📝 Citation
 
