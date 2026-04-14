@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -71,7 +72,18 @@ def parse_args():
         "--model", type=str, default="baseline", choices=["baseline", "mdfan"]
     )
     parser.add_argument("--backbone", type=str, default="mobilenet_v3_small")
-    parser.add_argument("--num_classes", type=int, default=5)
+    parser.add_argument(
+        "--num_classes",
+        type=int,
+        default=None,
+        help="Number of classes (default: infer from checkpoint)",
+    )
+    parser.add_argument(
+        "--num_sources",
+        type=int,
+        default=None,
+        help="Number of source domains for MDFAN (default: infer from checkpoint)",
+    )
 
     # Data
     parser.add_argument(
@@ -117,6 +129,45 @@ def parse_args():
     parser.add_argument("--device", type=str, default="cuda")
 
     return parser.parse_args()
+
+
+def _infer_num_sources(state_dict: dict[str, torch.Tensor]) -> int:
+    pattern = re.compile(r"^(?:module\.)?source_classifiers\.(\d+)\.")
+    indices: set[int] = set()
+
+    for key in state_dict:
+        match = pattern.match(key)
+        if match is not None:
+            indices.add(int(match.group(1)))
+
+    if not indices:
+        raise ValueError(
+            "Could not infer num_sources from checkpoint. "
+            "Pass --num_sources explicitly."
+        )
+
+    return max(indices) + 1
+
+
+def _infer_num_classes(state_dict: dict[str, torch.Tensor], model_type: str) -> int:
+    candidates: list[re.Pattern[str]]
+
+    if model_type == "baseline":
+        candidates = [re.compile(r"^(?:module\.)?head\.classifier\.weight$")]
+    else:
+        candidates = [
+            re.compile(r"^(?:module\.)?combined_classifier\.classifier\.weight$"),
+            re.compile(r"^(?:module\.)?source_classifiers\.\d+\.classifier\.weight$"),
+        ]
+
+    for pattern in candidates:
+        for key, value in state_dict.items():
+            if pattern.match(key) and value.ndim == 2:
+                return int(value.shape[0])
+
+    raise ValueError(
+        "Could not infer num_classes from checkpoint. Pass --num_classes explicitly."
+    )
 
 
 @torch.no_grad()
@@ -264,22 +315,36 @@ def main():
     logger.info(f"Loading checkpoint: {args.checkpoint}")
     checkpoint = torch.load(args.checkpoint, map_location=device)
 
+    state_dict = checkpoint.get("model_state_dict", checkpoint)
+
+    num_classes = args.num_classes
+    if num_classes is None:
+        num_classes = _infer_num_classes(state_dict, args.model)
+        logger.info(f"Inferred num_classes={num_classes} from checkpoint")
+
     # Create model
     if args.model == "baseline":
         model = create_model(
             model_type="baseline",
             backbone=args.backbone,
-            num_classes=args.num_classes,
+            num_classes=num_classes,
+            pretrained=False,
         )
     else:
+        num_sources = args.num_sources
+        if num_sources is None:
+            num_sources = _infer_num_sources(state_dict)
+            logger.info(f"Inferred num_sources={num_sources} from checkpoint")
+
         model = create_model(
             model_type="mdfan",
             backbone=args.backbone,
-            num_classes=args.num_classes,
-            num_sources=2,  # Default, not used for inference
+            num_classes=num_classes,
+            num_sources=num_sources,
+            pretrained=False,
         )
 
-    model.load_state_dict(checkpoint["model_state_dict"])
+    model.load_state_dict(state_dict)
     model = model.to(device)
     model.eval()
 
@@ -302,14 +367,27 @@ def main():
     )
 
     class_names = test_dataset.classes
+
+    if len(class_names) > num_classes:
+        raise ValueError(
+            f"Test dataset has {len(class_names)} classes but model outputs {num_classes}. "
+            "Use a matching test_dir or pass the correct --num_classes."
+        )
+
+    if len(class_names) < num_classes:
+        class_names = class_names + [
+            f"class_{i}" for i in range(len(class_names), num_classes)
+        ]
+
     logger.info(
-        f"Test dataset: {len(test_dataset)} samples, {len(class_names)} classes"
+        f"Test dataset: {len(test_dataset)} samples, {len(test_dataset.classes)} classes"
     )
+    logger.info(f"Model output classes: {num_classes}")
 
     # Evaluate classification
     logger.info("\n=== Classification Evaluation ===")
     cls_results = evaluate_classification(
-        model, test_loader, device, args.num_classes, class_names
+        model, test_loader, device, num_classes, class_names
     )
 
     logger.info(f"Accuracy: {cls_results['accuracy']:.4f}")
