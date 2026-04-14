@@ -166,8 +166,10 @@ uv sync --extra onnx
 uv run python src/export_onnx.py \
     --checkpoint ./outputs/exp/best_model.pt \
     --model baseline \
-    --backbone mobilenet_v3_small \
-    --num_classes 5
+    --backbone mobilenet_v3_small
+
+# If your checkpoint was trained with a non-default class count, override it:
+#   --num_classes <N>
 ```
 
 ## 🧪 Disease Classes
