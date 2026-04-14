@@ -7,7 +7,6 @@ Part of MDFAN Stage 2 alignment.
 STATUS: Scaffolded for future implementation.
 """
 
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,13 +15,13 @@ import torch.nn.functional as F
 class ClassifierAlignment(nn.Module):
     """
     Classifier alignment for multi-source domain adaptation.
-    
+
     Minimizes discrepancy between classifier predictions on target domain.
     This helps align decision boundaries across source-specific classifiers.
-    
+
     NOTE: This module is scaffolded for future implementation.
           Current MDFAN MVP uses feature-level alignment only.
-    
+
     Args:
         num_sources: Number of source classifiers
         loss_type: Type of alignment loss ('l1', 'l2', 'kl')
@@ -43,11 +42,11 @@ class ClassifierAlignment(nn.Module):
     ) -> torch.Tensor:
         """
         Compute classifier alignment loss.
-        
+
         Args:
             predictions_list: List of softmax outputs from each source classifier
                               Shape: [(B, C), (B, C), ...]
-            
+
         Returns:
             Alignment loss scalar
         """
@@ -69,12 +68,8 @@ class ClassifierAlignment(nn.Module):
                     loss = F.mse_loss(pred_i, pred_j)
                 elif self.loss_type == "kl":
                     # Symmetric KL divergence
-                    kl_ij = F.kl_div(
-                        pred_i.log(), pred_j, reduction='batchmean'
-                    )
-                    kl_ji = F.kl_div(
-                        pred_j.log(), pred_i, reduction='batchmean'
-                    )
+                    kl_ij = F.kl_div(pred_i.log(), pred_j, reduction="batchmean")
+                    kl_ji = F.kl_div(pred_j.log(), pred_i, reduction="batchmean")
                     loss = (kl_ij + kl_ji) / 2
                 else:
                     loss = F.l1_loss(pred_i, pred_j)
