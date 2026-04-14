@@ -122,7 +122,8 @@ uv run python src/train.py \
     --target_dir ./data/raw/andean_field \
     --epochs 50 \
     --lambda_mmd 1.0 \
-    --lambda_adv 0.5
+    --lambda_adv 0.5 \
+    --lambda_align 0.0
 ```
 
 ### Evaluation
@@ -134,6 +135,15 @@ uv run python src/eval.py \
     --ood_dir ./data/raw/andean_field/ood_classes \
     --ood_method entropy \
     --visualize
+```
+
+**Grad-CAM (requires optional `viz` extra):**
+```bash
+uv sync --extra viz
+uv run python src/eval.py \
+    --checkpoint ./outputs/best_model.pt \
+    --test_dir ./data/raw/andean_field/test \
+    --gradcam
 ```
 
 ## 🧪 Disease Classes

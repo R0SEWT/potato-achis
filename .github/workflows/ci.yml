@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Determine changed Python files
+        id: changed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+
+          echo "Base: $BASE"
+          echo "Head: $HEAD"
+
+          # On first push of a new branch, `github.event.before` can be all zeros.
+          # Fall back to the parent commit so `git diff` has a valid base.
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "Base is all zeros; falling back to HEAD^"
+            if git rev-parse "$HEAD^" >/dev/null 2>&1; then
+              BASE="$(git rev-parse "$HEAD^")"
+            else
+              BASE="$HEAD"
+            fi
+            echo "Fallback base: $BASE"
+          fi
+
+          files=$(git diff --name-only "$BASE" "$HEAD" -- '*.py' | tr '\n' ' ')
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+          echo "Changed Python files: $files"
+
+      - name: Ruff lint (changed files)
+        if: steps.changed.outputs.files != ''
+        run: uv run ruff check ${{ steps.changed.outputs.files }}
+
+      - name: Ruff format (changed files)
+        if: steps.changed.outputs.files != ''
+        run: uv run ruff format --check ${{ steps.changed.outputs.files }}
+
+      - name: Type check (informational)
+        continue-on-error: true
+        run: uv run mypy src/
+
+      - name: Tests
+        run: uv run pytest tests/ -q

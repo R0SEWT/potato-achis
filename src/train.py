@@ -6,7 +6,7 @@ Main training entry point for baseline and MDFAN models.
 Usage:
     # Baseline training
     python src/train.py --model baseline --backbone mobilenet_v3_small --data_dir ./data/plantvillage
-    
+
     # MDFAN training
     python src/train.py --model mdfan --backbone resnet50 --source_dirs ./data/source1 ./data/source2 --target_dir ./data/target
 """
@@ -33,12 +33,12 @@ from src.losses import MMDLoss
 from src.losses.domain_adversarial_loss import ClassificationLoss, MultiSourceDomainLoss
 from src.models import create_model
 from src.models.components.gradient_reversal import get_lambda_schedule
+from src.models.mdfan import ClassifierAlignment
 from src.utils.metrics import MetricTracker, compute_accuracy, compute_f1
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -47,58 +47,107 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train potato disease classifier")
 
     # Model
-    parser.add_argument('--model', type=str, default='baseline',
-                        choices=['baseline', 'mdfan'],
-                        help='Model type')
-    parser.add_argument('--backbone', type=str, default='mobilenet_v3_small',
-                        help='Backbone network')
-    parser.add_argument('--num_classes', type=int, default=5,
-                        help='Number of disease classes')
-    parser.add_argument('--pretrained', action='store_true', default=True,
-                        help='Use pretrained backbone')
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="baseline",
+        choices=["baseline", "mdfan"],
+        help="Model type",
+    )
+    parser.add_argument(
+        "--backbone", type=str, default="mobilenet_v3_small", help="Backbone network"
+    )
+    parser.add_argument(
+        "--num_classes", type=int, default=5, help="Number of disease classes"
+    )
+    pretrained_group = parser.add_mutually_exclusive_group()
+    pretrained_group.add_argument(
+        "--pretrained",
+        dest="pretrained",
+        action="store_true",
+        help="Use pretrained backbone weights (default)",
+    )
+    pretrained_group.add_argument(
+        "--no-pretrained",
+        "--no_pretrained",
+        dest="pretrained",
+        action="store_false",
+        help="Disable pretrained backbone weights",
+    )
+    parser.set_defaults(pretrained=True)
 
     # Data
-    parser.add_argument('--data_dir', type=str, default='./data/raw/plantvillage',
-                        help='Data directory (for baseline)')
-    parser.add_argument('--source_dirs', nargs='+', type=str,
-                        help='Source domain directories (for MDFAN)')
-    parser.add_argument('--target_dir', type=str,
-                        help='Target domain directory (for MDFAN)')
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--num_workers', type=int, default=4)
-    parser.add_argument('--image_size', type=int, default=224)
-    parser.add_argument('--use_andean_aug', action='store_true', default=True,
-                        help='Use Andean field augmentations')
+    parser.add_argument(
+        "--data_dir",
+        type=str,
+        default="./data/raw/plantvillage",
+        help="Data directory (for baseline)",
+    )
+    parser.add_argument(
+        "--source_dirs",
+        nargs="+",
+        type=str,
+        help="Source domain directories (for MDFAN)",
+    )
+    parser.add_argument(
+        "--target_dir", type=str, help="Target domain directory (for MDFAN)"
+    )
+    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--image_size", type=int, default=224)
+    andean_aug_group = parser.add_mutually_exclusive_group()
+    andean_aug_group.add_argument(
+        "--use-andean-aug",
+        "--use_andean_aug",
+        dest="use_andean_aug",
+        action="store_true",
+        help="Use Andean field augmentations (default)",
+    )
+    andean_aug_group.add_argument(
+        "--no-andean-aug",
+        "--no_andean_aug",
+        dest="use_andean_aug",
+        action="store_false",
+        help="Disable Andean field augmentations",
+    )
+    parser.set_defaults(use_andean_aug=True)
 
     # Training
-    parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--lr', type=float, default=0.001)
-    parser.add_argument('--weight_decay', type=float, default=0.0001)
-    parser.add_argument('--lr_scheduler', type=str, default='cosine',
-                        choices=['none', 'step', 'cosine'])
+    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--lr", type=float, default=0.001)
+    parser.add_argument("--weight_decay", type=float, default=0.0001)
+    parser.add_argument(
+        "--lr_scheduler", type=str, default="cosine", choices=["none", "step", "cosine"]
+    )
 
     # MDFAN specific
-    parser.add_argument('--lambda_mmd', type=float, default=1.0,
-                        help='MMD loss weight')
-    parser.add_argument('--lambda_adv', type=float, default=0.5,
-                        help='Adversarial loss weight')
-    parser.add_argument('--grl_warmup', type=int, default=10,
-                        help='GRL warmup epochs')
+    parser.add_argument("--lambda_mmd", type=float, default=1.0, help="MMD loss weight")
+    parser.add_argument(
+        "--lambda_adv", type=float, default=0.5, help="Adversarial loss weight"
+    )
+    parser.add_argument(
+        "--lambda_align",
+        type=float,
+        default=0.0,
+        help="Classifier alignment loss weight (Stage 2; 0 disables)",
+    )
+    parser.add_argument("--grl_warmup", type=int, default=10, help="GRL warmup epochs")
 
     # Output
-    parser.add_argument('--output_dir', type=str, default='./outputs')
-    parser.add_argument('--exp_name', type=str, default=None,
-                        help='Experiment name')
-    parser.add_argument('--save_freq', type=int, default=10,
-                        help='Checkpoint save frequency')
+    parser.add_argument("--output_dir", type=str, default="./outputs")
+    parser.add_argument("--exp_name", type=str, default=None, help="Experiment name")
+    parser.add_argument(
+        "--save_freq", type=int, default=10, help="Checkpoint save frequency"
+    )
 
     # TensorBoard
-    parser.add_argument('--log_histograms', action='store_true',
-                        help='Log weight histograms (slower)')
+    parser.add_argument(
+        "--log_histograms", action="store_true", help="Log weight histograms (slower)"
+    )
 
     # Device
-    parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--seed", type=int, default=42)
 
     return parser.parse_args()
 
@@ -126,7 +175,7 @@ def train_baseline_epoch(
     """Train one epoch for baseline model."""
     model.train()
 
-    metrics = MetricTracker(['loss', 'accuracy'])
+    metrics = MetricTracker(["loss", "accuracy"])
 
     pbar = tqdm(train_loader, desc="Training")
     for images, labels in pbar:
@@ -144,8 +193,8 @@ def train_baseline_epoch(
 
         # Metrics
         acc = compute_accuracy(logits, labels)
-        metrics.update('loss', loss.item(), images.size(0))
-        metrics.update('accuracy', acc, images.size(0))
+        metrics.update("loss", loss.item(), images.size(0))
+        metrics.update("accuracy", acc, images.size(0))
 
         pbar.set_postfix(metrics.get_averages())
 
@@ -159,10 +208,12 @@ def train_mdfan_epoch(
     criterion_cls: nn.Module,
     criterion_domain: nn.Module,
     criterion_mmd: nn.Module,
+    criterion_align: nn.Module | None,
     optimizer: optim.Optimizer,
     device: str,
     lambda_adv: float,
     lambda_mmd: float,
+    lambda_align: float,
     epoch: int,
     max_epochs: int,
     grl_warmup: int,
@@ -180,14 +231,20 @@ def train_mdfan_epoch(
     )
     model.set_grl_lambda(grl_lambda)
 
-    metrics = MetricTracker([
-        'total_loss', 'cls_loss', 'domain_loss', 'mmd_loss', 'accuracy'
-    ])
+    metrics = MetricTracker(
+        [
+            "total_loss",
+            "cls_loss",
+            "domain_loss",
+            "mmd_loss",
+            "align_loss",
+            "accuracy",
+        ]
+    )
 
     # Create synchronized iterator
     iterator = MultiSourceIterator(
-        source_loaders, target_loader,
-        num_iterations=len(target_loader)
+        source_loaders, target_loader, num_iterations=len(target_loader)
     )
 
     pbar = tqdm(iterator, desc=f"Training (λ={grl_lambda:.2f})")
@@ -205,9 +262,9 @@ def train_mdfan_epoch(
         total_correct = 0
         total_samples = 0
 
-        for i, (logits, labels) in enumerate(zip(
-            outputs['source_logits'], source_labels
-        )):
+        for _i, (logits, labels) in enumerate(
+            zip(outputs["source_logits"], source_labels)
+        ):
             cls_loss += criterion_cls(logits, labels)
             total_correct += (logits.argmax(1) == labels).sum().item()
             total_samples += labels.size(0)
@@ -217,18 +274,32 @@ def train_mdfan_epoch(
 
         # Domain adversarial loss
         domain_loss = criterion_domain(
-            outputs['source_domain_preds'],
-            outputs['target_domain_preds'],
+            outputs["source_domain_preds"],
+            outputs["target_domain_preds"],
         )
 
         # MMD loss
         mmd_loss = criterion_mmd(
-            outputs['source_features'],
-            outputs['target_features'],
+            outputs["source_features"],
+            outputs["target_features"],
         )
 
+        # Classifier alignment loss (target only; Stage 2)
+        if criterion_align is not None and lambda_align != 0.0:
+            target_probs = [
+                torch.softmax(logits, dim=1) for logits in outputs["target_logits"]
+            ]
+            align_loss = criterion_align(target_probs)
+        else:
+            align_loss = torch.tensor(0.0, device=device)
+
         # Total loss
-        total_loss = cls_loss + lambda_adv * domain_loss + lambda_mmd * mmd_loss
+        total_loss = (
+            cls_loss
+            + lambda_adv * domain_loss
+            + lambda_mmd * mmd_loss
+            + lambda_align * align_loss
+        )
 
         # Backward
         optimizer.zero_grad()
@@ -236,11 +307,12 @@ def train_mdfan_epoch(
         optimizer.step()
 
         # Update metrics
-        metrics.update('total_loss', total_loss.item())
-        metrics.update('cls_loss', cls_loss.item())
-        metrics.update('domain_loss', domain_loss.item())
-        metrics.update('mmd_loss', mmd_loss.item())
-        metrics.update('accuracy', accuracy)
+        metrics.update("total_loss", total_loss.item())
+        metrics.update("cls_loss", cls_loss.item())
+        metrics.update("domain_loss", domain_loss.item())
+        metrics.update("mmd_loss", mmd_loss.item())
+        metrics.update("align_loss", align_loss.item())
+        metrics.update("accuracy", accuracy)
 
         pbar.set_postfix({k: f"{v:.4f}" for k, v in metrics.get_averages().items()})
 
@@ -258,7 +330,7 @@ def evaluate(
     """Evaluate model on validation set."""
     model.eval()
 
-    metrics = MetricTracker(['loss', 'accuracy'])
+    metrics = MetricTracker(["loss", "accuracy"])
     all_preds = []
     all_labels = []
 
@@ -270,8 +342,8 @@ def evaluate(
         loss = criterion(logits, labels)
 
         acc = compute_accuracy(logits, labels)
-        metrics.update('loss', loss.item(), images.size(0))
-        metrics.update('accuracy', acc, images.size(0))
+        metrics.update("loss", loss.item(), images.size(0))
+        metrics.update("accuracy", acc, images.size(0))
 
         all_preds.append(logits.argmax(1))
         all_labels.append(labels)
@@ -282,7 +354,7 @@ def evaluate(
     f1 = compute_f1(all_preds, all_labels, num_classes)
 
     results = metrics.get_averages()
-    results['f1'] = f1
+    results["f1"] = f1
 
     return results
 
@@ -295,12 +367,15 @@ def save_checkpoint(
     save_path: str,
 ):
     """Save model checkpoint."""
-    torch.save({
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'metrics': metrics,
-    }, save_path)
+    torch.save(
+        {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "metrics": metrics,
+        },
+        save_path,
+    )
     logger.info(f"Checkpoint saved: {save_path}")
 
 
@@ -314,9 +389,7 @@ def main():
 
     # Create output directory
     if args.exp_name is None:
-        args.exp_name = (
-            f"{args.model}_{args.backbone}_{datetime.now():%Y%m%d_%H%M%S}"
-        )
+        args.exp_name = f"{args.model}_{args.backbone}_{datetime.now():%Y%m%d_%H%M%S}"
 
     output_dir = Path(args.output_dir) / args.exp_name
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -357,9 +430,13 @@ def main():
 
     # Get num_classes from data module (auto-detected)
     num_classes = (
-        data_module.num_classes if hasattr(data_module, "num_classes") else args.num_classes
+        data_module.num_classes
+        if hasattr(data_module, "num_classes")
+        else args.num_classes
     )
-    logger.info(f"Detected {num_classes} classes: {getattr(data_module, 'classes', [])}")
+    logger.info(
+        f"Detected {num_classes} classes: {getattr(data_module, 'classes', [])}"
+    )
 
     # Create model AFTER data setup
     logger.info(f"Creating {args.model} model with {args.backbone} backbone")
@@ -404,10 +481,13 @@ def main():
         "use_andean_aug": args.use_andean_aug,
     }
     if args.model == "mdfan":
-        hparams.update({
-            "lambda_mmd": args.lambda_mmd,
-            "lambda_adv": args.lambda_adv,
-        })
+        hparams.update(
+            {
+                "lambda_mmd": args.lambda_mmd,
+                "lambda_adv": args.lambda_adv,
+                "lambda_align": args.lambda_align,
+            }
+        )
     writer.add_text("hyperparameters", str(hparams), 0)
 
     # Loss functions
@@ -416,6 +496,7 @@ def main():
     if args.model == "mdfan":
         criterion_domain = MultiSourceDomainLoss(num_sources=len(args.source_dirs))
         criterion_mmd = MMDLoss(kernel_type="rbf")
+        criterion_align = ClassifierAlignment(num_sources=len(args.source_dirs))
 
     # Optimizer
     optimizer = optim.AdamW(
@@ -425,20 +506,18 @@ def main():
     )
 
     # Learning rate scheduler
-    if args.lr_scheduler == 'cosine':
+    if args.lr_scheduler == "cosine":
         scheduler = optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=args.epochs, eta_min=args.lr * 0.01
         )
-    elif args.lr_scheduler == 'step':
-        scheduler = optim.lr_scheduler.StepLR(
-            optimizer, step_size=20, gamma=0.1
-        )
+    elif args.lr_scheduler == "step":
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
     else:
         scheduler = None
 
     # Training loop
     best_val_acc = 0.0
-    history = {'train': [], 'val': []}
+    history = {"train": [], "val": []}
 
     logger.info("Starting training...")
 
@@ -446,26 +525,31 @@ def main():
         logger.info(f"\nEpoch {epoch + 1}/{args.epochs}")
 
         # Train
-        if args.model == 'baseline':
+        if args.model == "baseline":
             train_metrics = train_baseline_epoch(
                 model, train_loader, criterion_cls, optimizer, device
             )
         else:
             train_metrics = train_mdfan_epoch(
-                model, source_loaders, target_loader,
-                criterion_cls, criterion_domain, criterion_mmd,
-                optimizer, device,
+                model,
+                source_loaders,
+                target_loader,
+                criterion_cls,
+                criterion_domain,
+                criterion_mmd,
+                criterion_align,
+                optimizer,
+                device,
                 lambda_adv=args.lambda_adv,
                 lambda_mmd=args.lambda_mmd,
+                lambda_align=args.lambda_align,
                 epoch=epoch,
                 max_epochs=args.epochs,
                 grl_warmup=args.grl_warmup,
             )
 
         # Validate
-        val_metrics = evaluate(
-            model, val_loader, criterion_cls, device, num_classes
-        )
+        val_metrics = evaluate(model, val_loader, criterion_cls, device, num_classes)
 
         # Update scheduler
         if scheduler is not None:
@@ -493,32 +577,37 @@ def main():
                     if param.grad is not None:
                         writer.add_histogram(f"grads/{name}", param.grad, epoch)
 
-        history['train'].append(train_metrics)
-        history['val'].append(val_metrics)
+        history["train"].append(train_metrics)
+        history["val"].append(val_metrics)
 
         # Save best model
-        if val_metrics['accuracy'] > best_val_acc:
-            best_val_acc = val_metrics['accuracy']
+        if val_metrics["accuracy"] > best_val_acc:
+            best_val_acc = val_metrics["accuracy"]
             save_checkpoint(
-                model, optimizer, epoch, val_metrics,
-                str(output_dir / 'best_model.pt')
+                model, optimizer, epoch, val_metrics, str(output_dir / "best_model.pt")
             )
 
         # Periodic checkpoint
         if (epoch + 1) % args.save_freq == 0:
             save_checkpoint(
-                model, optimizer, epoch, val_metrics,
-                str(output_dir / f'checkpoint_epoch_{epoch + 1}.pt')
+                model,
+                optimizer,
+                epoch,
+                val_metrics,
+                str(output_dir / f"checkpoint_epoch_{epoch + 1}.pt"),
             )
 
     # Save final model
     save_checkpoint(
-        model, optimizer, args.epochs - 1, val_metrics,
-        str(output_dir / 'final_model.pt')
+        model,
+        optimizer,
+        args.epochs - 1,
+        val_metrics,
+        str(output_dir / "final_model.pt"),
     )
 
     # Save training history
-    torch.save(history, str(output_dir / 'history.pt'))
+    torch.save(history, str(output_dir / "history.pt"))
 
     # Close TensorBoard writer
     writer.close()
@@ -528,5 +617,5 @@ def main():
     logger.info(f"View TensorBoard: tensorboard --logdir {tb_dir}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
