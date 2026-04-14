@@ -67,6 +67,7 @@ onnx = [
 [project.scripts]
 potato-train = "src.train:main"
 potato-eval = "src.eval:main"
+potato-export-onnx = "src.export_onnx:main"
 
 [build-system]
 requires = ["hatchling"]

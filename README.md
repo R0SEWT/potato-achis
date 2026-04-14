@@ -163,7 +163,7 @@ uv run python src/eval.py \
 
 ```bash
 uv sync --extra onnx
-uv run python src/export_onnx.py \
+uv run potato-export-onnx \
     --checkpoint ./outputs/exp/best_model.pt \
     --model baseline \
     --backbone mobilenet_v3_small
