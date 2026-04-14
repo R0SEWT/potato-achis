@@ -60,7 +60,7 @@ notebooks = [
     "ipywidgets>=8.1.0",
 ]
 onnx = [
-    "onnx>=1.15.0",
+    "onnx>=1.15.0,<1.19.0",
     "onnxruntime>=1.17.0",
 ]
 
