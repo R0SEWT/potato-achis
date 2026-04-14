@@ -13,6 +13,8 @@ Reference:
     Adapted from multi-source domain adaptation literature.
 """
 
+from typing import TypedDict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -22,6 +24,16 @@ from ..heads import ClassifierHead
 from .classifier_alignment import ClassifierAlignment
 from .domain_discriminator import MultiSourceDomainDiscriminator
 from .feature_extractor import FeatureExtractor
+
+
+class MDFANTrainOutputs(TypedDict):
+    source_features: list[torch.Tensor]
+    source_logits: list[torch.Tensor]
+    source_domain_preds: list[torch.Tensor]
+    target_features: torch.Tensor
+    target_logits: list[torch.Tensor]
+    target_domain_preds: list[torch.Tensor]
+    align_loss: torch.Tensor
 
 
 class MDFAN(nn.Module):
@@ -191,7 +203,7 @@ class MDFAN(nn.Module):
         source_labels: list[torch.Tensor],
         target_images: torch.Tensor,
         compute_alignment_loss: bool = False,
-    ) -> dict[str, torch.Tensor]:
+    ) -> MDFANTrainOutputs:
         """
         Complete forward pass for training.
 
@@ -203,38 +215,48 @@ class MDFAN(nn.Module):
         Returns:
             Dictionary with all intermediate outputs
         """
-        outputs = {
-            "source_features": [],
-            "source_logits": [],
-            "source_domain_preds": [],
-            "target_features": None,
-            "target_logits": [],
-            "target_domain_preds": [],
-            "align_loss": None,
-        }
+        if len(source_images) != len(source_labels):
+            raise ValueError(
+                "source_images and source_labels must have the same length "
+                f"(got {len(source_images)} and {len(source_labels)})"
+            )
+
+        if len(source_images) != self.num_sources:
+            raise ValueError(
+                f"Expected {self.num_sources} source domains, got {len(source_images)}"
+            )
+
+        source_features: list[torch.Tensor] = []
+        source_logits: list[torch.Tensor] = []
+        source_domain_preds: list[torch.Tensor] = []
 
         # Process each source domain
-        for i, (src_img, _src_lbl) in enumerate(zip(source_images, source_labels)):
+        for i in range(self.num_sources):
+            src_img = source_images[i]
             logits, domain_pred, features = self.forward_source(src_img, i)
-            outputs["source_features"].append(features)
-            outputs["source_logits"].append(logits)
-            outputs["source_domain_preds"].append(domain_pred)
+            source_features.append(features)
+            source_logits.append(logits)
+            source_domain_preds.append(domain_pred)
 
         # Process target domain
         target_logits, target_domain_preds, target_features = self.forward_target(
             target_images
         )
-        outputs["target_features"] = target_features
-        outputs["target_logits"] = target_logits
-        outputs["target_domain_preds"] = target_domain_preds
-
         if compute_alignment_loss:
             target_probs = [F.softmax(logits, dim=1) for logits in target_logits]
-            outputs["align_loss"] = self.classifier_alignment(target_probs)
+            align_loss = self.classifier_alignment(target_probs)
         else:
-            outputs["align_loss"] = target_features.new_tensor(0.0)
+            align_loss = target_features.new_tensor(0.0)
 
-        return outputs
+        return {
+            "source_features": source_features,
+            "source_logits": source_logits,
+            "source_domain_preds": source_domain_preds,
+            "target_features": target_features,
+            "target_logits": target_logits,
+            "target_domain_preds": target_domain_preds,
+            "align_loss": align_loss,
+        }
 
     def get_combined_prediction(
         self,
