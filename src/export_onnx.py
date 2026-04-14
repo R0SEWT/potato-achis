@@ -9,15 +9,13 @@ Usage:
     uv run python src/export_onnx.py \
         --checkpoint ./outputs/exp/best_model.pt \
         --model baseline \
-        --backbone mobilenet_v3_small \
-        --num_classes 5
+        --backbone mobilenet_v3_small
 
     # MDFAN
     uv run python src/export_onnx.py \
         --checkpoint ./outputs/exp/best_model.pt \
         --model mdfan \
-        --backbone resnet50 \
-        --num_classes 5
+        --backbone resnet50
 """
 
 from __future__ import annotations
@@ -33,9 +31,11 @@ import torch
 import torch.nn as nn
 
 # Add repo root to path so `src.*` imports work when running as a script.
-sys.path.insert(0, str(Path(__file__).parent.parent))
+_REPO_ROOT = str(Path(__file__).parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
-from src.models import create_model
+from src.models import create_model  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -69,8 +69,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--num_classes",
         type=int,
-        default=5,
-        help="Number of output classes",
+        default=None,
+        help="Number of output classes (default: infer from checkpoint)",
     )
 
     parser.add_argument(
@@ -134,6 +134,27 @@ def _infer_num_sources(state_dict: dict[str, torch.Tensor]) -> int:
     return max(indices) + 1
 
 
+def _infer_num_classes(state_dict: dict[str, torch.Tensor], model_type: str) -> int:
+    candidates: list[re.Pattern[str]]
+
+    if model_type == "baseline":
+        candidates = [re.compile(r"^(?:module\.)?head\.classifier\.weight$")]
+    else:
+        candidates = [
+            re.compile(r"^(?:module\.)?combined_classifier\.classifier\.weight$"),
+            re.compile(r"^(?:module\.)?source_classifiers\.\d+\.classifier\.weight$"),
+        ]
+
+    for pattern in candidates:
+        for key, value in state_dict.items():
+            if pattern.match(key) and value.ndim == 2:
+                return int(value.shape[0])
+
+    raise ValueError(
+        "Could not infer num_classes from checkpoint. Pass --num_classes explicitly."
+    )
+
+
 class _InferenceWrapper(nn.Module):
     def __init__(self, model: nn.Module):
         super().__init__()
@@ -151,7 +172,12 @@ def export_onnx(
 ) -> None:
     model.eval()
 
-    dummy = torch.randn(1, 3, image_size, image_size)
+    try:
+        device = next(model.parameters()).device
+    except StopIteration:
+        device = torch.device("cpu")
+
+    dummy = torch.randn(1, 3, image_size, image_size, device=device)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -222,11 +248,16 @@ def main() -> None:
     checkpoint = torch.load(str(checkpoint_path), map_location=device)
     state_dict = checkpoint.get("model_state_dict", checkpoint)
 
+    num_classes = args.num_classes
+    if num_classes is None:
+        num_classes = _infer_num_classes(state_dict, args.model)
+        logger.info(f"Inferred num_classes={num_classes} from checkpoint")
+
     if args.model == "baseline":
         model = create_model(
             model_type="baseline",
             backbone=args.backbone,
-            num_classes=args.num_classes,
+            num_classes=num_classes,
             pretrained=False,
         )
     else:
@@ -234,7 +265,7 @@ def main() -> None:
         model = create_model(
             model_type="mdfan",
             backbone=args.backbone,
-            num_classes=args.num_classes,
+            num_classes=num_classes,
             num_sources=num_sources,
             pretrained=False,
         )
