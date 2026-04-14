@@ -13,6 +13,7 @@ Usage:
 
 import argparse
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -142,6 +143,13 @@ def parse_args():
     # TensorBoard
     parser.add_argument(
         "--log_histograms", action="store_true", help="Log weight histograms (slower)"
+    )
+
+    # Tracking
+    parser.add_argument(
+        "--use_wandb",
+        action="store_true",
+        help="Enable Weights & Biases logging (requires `uv sync --extra tracking`)",
     )
 
     # Device
@@ -486,6 +494,31 @@ def main():
         )
     writer.add_text("hyperparameters", str(hparams), 0)
 
+    # Optional W&B logging
+    wandb_module = None
+    wandb_run = None
+    if args.use_wandb:
+        try:
+            import wandb as wandb_module  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise ImportError(
+                "Weights & Biases logging requested but `wandb` is not installed. "
+                "Install with `uv sync --extra tracking`."
+            ) from exc
+
+        wandb_project = os.environ.get("WANDB_PROJECT", "potato-achis")
+        wandb_entity = os.environ.get("WANDB_ENTITY")
+
+        wandb_config = {**hparams, "output_dir": str(output_dir)}
+        wandb_run = wandb_module.init(
+            project=wandb_project,
+            entity=wandb_entity if wandb_entity else None,
+            name=args.exp_name,
+            config=wandb_config,
+            dir=str(output_dir),
+            tags=[args.model, args.backbone],
+        )
+
     # Loss functions
     criterion_cls = ClassificationLoss(num_classes=num_classes)
 
@@ -563,6 +596,15 @@ def main():
         current_lr = optimizer.param_groups[0]["lr"]
         writer.add_scalar("train/learning_rate", current_lr, epoch)
 
+        if wandb_run is not None:
+            wandb_log = {
+                "epoch": epoch,
+                "train/learning_rate": current_lr,
+                **{f"train/{k}": v for k, v in train_metrics.items()},
+                **{f"val/{k}": v for k, v in val_metrics.items()},
+            }
+            wandb_run.log(wandb_log, step=epoch)
+
         # Log weight histograms (optional, slower)
         if args.log_histograms and (epoch % 5 == 0 or epoch == args.epochs - 1):
             for name, param in model.named_parameters():
@@ -580,6 +622,9 @@ def main():
             save_checkpoint(
                 model, optimizer, epoch, val_metrics, str(output_dir / "best_model.pt")
             )
+
+            if wandb_run is not None:
+                wandb_run.summary["best_val_accuracy"] = best_val_acc
 
         # Periodic checkpoint
         if (epoch + 1) % args.save_freq == 0:
@@ -602,6 +647,37 @@ def main():
 
     # Save training history
     torch.save(history, str(output_dir / "history.pt"))
+
+    if wandb_run is not None and wandb_module is not None:
+        best_model_path = output_dir / "best_model.pt"
+        final_model_path = output_dir / "final_model.pt"
+        history_path = output_dir / "history.pt"
+
+        if best_model_path.exists():
+            artifact = wandb_module.Artifact(
+                name=f"{args.exp_name}-best-model",
+                type="model",
+            )
+            artifact.add_file(str(best_model_path))
+            wandb_run.log_artifact(artifact)
+
+        if final_model_path.exists():
+            artifact = wandb_module.Artifact(
+                name=f"{args.exp_name}-final-model",
+                type="model",
+            )
+            artifact.add_file(str(final_model_path))
+            wandb_run.log_artifact(artifact)
+
+        if history_path.exists():
+            artifact = wandb_module.Artifact(
+                name=f"{args.exp_name}-history",
+                type="training",
+            )
+            artifact.add_file(str(history_path))
+            wandb_run.log_artifact(artifact)
+
+        wandb_run.finish()
 
     # Close TensorBoard writer
     writer.close()
