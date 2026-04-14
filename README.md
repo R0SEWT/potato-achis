@@ -159,6 +159,19 @@ uv run python src/eval.py \
     --gradcam
 ```
 
+### Prediction
+
+```bash
+uv run potato-predict \
+    --checkpoint ./outputs/exp/best_model.pt \
+    --input ./some_image.jpg
+
+uv run potato-predict \
+    --checkpoint ./outputs/exp/best_model.pt \
+    --input ./some_folder_of_images \
+    --output ./outputs/predictions.jsonl
+```
+
 ### ONNX export
 
 ```bash

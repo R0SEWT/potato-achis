@@ -58,6 +58,13 @@ Dependency already in `pyproject.toml` (`tracking` extra).
 - [x] Save `num_classes` / `num_sources` and hparams into checkpoints
 - [x] Use metadata in eval/export tools when available
 
+### 6. Prediction CLI
+
+**Priority: low**
+
+- [x] Add `src/predict.py` to run inference on a single image or a folder
+- [x] Register `potato-predict` console script and document usage
+
 ## ADRs
 
 Architecture decisions are documented in [`docs/adr/`](adr/) using MADR format. Created incrementally as decisions are made.
