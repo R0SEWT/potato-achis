@@ -48,8 +48,8 @@ Dependency already in `pyproject.toml` (`tracking` extra).
 
 **Priority: low**
 
-- [ ] Export script using `torch.onnx.export()` for inference-only models
-- [ ] Validate exported model with `onnxruntime`
+- [x] Export script using `torch.onnx.export()` for inference-only models
+- [x] Validate exported model with `onnxruntime`
 
 ## ADRs
 

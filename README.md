@@ -72,7 +72,7 @@ cd potato-achis
 uv sync
 
 # With optional dependencies
-uv sync --extra dev --extra viz --extra tracking
+uv sync --extra dev --extra viz --extra tracking --extra onnx
 
 # Or install all extras
 uv sync --all-extras
@@ -157,6 +157,17 @@ uv run python src/eval.py \
     --checkpoint ./outputs/best_model.pt \
     --test_dir ./data/raw/andean_field/test \
     --gradcam
+```
+
+### ONNX export
+
+```bash
+uv sync --extra onnx
+uv run python src/export_onnx.py \
+    --checkpoint ./outputs/exp/best_model.pt \
+    --model baseline \
+    --backbone mobilenet_v3_small \
+    --num_classes 5
 ```
 
 ## 🧪 Disease Classes
