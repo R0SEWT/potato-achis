@@ -248,9 +248,15 @@ def main() -> None:
     checkpoint = torch.load(str(checkpoint_path), map_location=device)
     state_dict = checkpoint.get("model_state_dict", checkpoint)
 
+    checkpoint_meta = checkpoint.get("meta", {}) if isinstance(checkpoint, dict) else {}
+
     num_classes = args.num_classes
     if num_classes is None:
-        num_classes = _infer_num_classes(state_dict, args.model)
+        meta_num_classes = checkpoint_meta.get("num_classes")
+        if isinstance(meta_num_classes, int):
+            num_classes = meta_num_classes
+        else:
+            num_classes = _infer_num_classes(state_dict, args.model)
         logger.info(f"Inferred num_classes={num_classes} from checkpoint")
 
     if args.model == "baseline":

@@ -316,10 +316,15 @@ def main():
     checkpoint = torch.load(args.checkpoint, map_location=device)
 
     state_dict = checkpoint.get("model_state_dict", checkpoint)
+    checkpoint_meta = checkpoint.get("meta", {}) if isinstance(checkpoint, dict) else {}
 
     num_classes = args.num_classes
     if num_classes is None:
-        num_classes = _infer_num_classes(state_dict, args.model)
+        meta_num_classes = checkpoint_meta.get("num_classes")
+        if isinstance(meta_num_classes, int):
+            num_classes = meta_num_classes
+        else:
+            num_classes = _infer_num_classes(state_dict, args.model)
         logger.info(f"Inferred num_classes={num_classes} from checkpoint")
 
     # Create model
@@ -333,7 +338,11 @@ def main():
     else:
         num_sources = args.num_sources
         if num_sources is None:
-            num_sources = _infer_num_sources(state_dict)
+            meta_num_sources = checkpoint_meta.get("num_sources")
+            if isinstance(meta_num_sources, int):
+                num_sources = meta_num_sources
+            else:
+                num_sources = _infer_num_sources(state_dict)
             logger.info(f"Inferred num_sources={num_sources} from checkpoint")
 
         model = create_model(

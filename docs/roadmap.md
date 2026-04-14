@@ -51,6 +51,13 @@ Dependency already in `pyproject.toml` (`tracking` extra).
 - [x] Export script using `torch.onnx.export()` for inference-only models
 - [x] Validate exported model with `onnxruntime`
 
+### 5. Checkpoint metadata
+
+**Priority: low**
+
+- [x] Save `num_classes` / `num_sources` and hparams into checkpoints
+- [x] Use metadata in eval/export tools when available
+
 ## ADRs
 
 Architecture decisions are documented in [`docs/adr/`](adr/) using MADR format. Created incrementally as decisions are made.
