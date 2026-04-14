@@ -369,6 +369,7 @@ def save_checkpoint(
     epoch: int,
     metrics: dict,
     save_path: str,
+    metadata: dict | None = None,
 ):
     """Save model checkpoint."""
     torch.save(
@@ -377,6 +378,7 @@ def save_checkpoint(
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "metrics": metrics,
+            "meta": metadata or {},
         },
         save_path,
     )
@@ -493,6 +495,17 @@ def main():
             }
         )
     writer.add_text("hyperparameters", str(hparams), 0)
+
+    checkpoint_meta = {
+        "model": args.model,
+        "backbone": args.backbone,
+        "num_classes": num_classes,
+        "classes": getattr(data_module, "classes", None),
+        "num_sources": len(args.source_dirs) if args.model == "mdfan" else None,
+        "seed": args.seed,
+        "exp_name": args.exp_name,
+        "hparams": hparams,
+    }
 
     # Optional W&B logging
     wandb_module = None
@@ -620,7 +633,12 @@ def main():
         if val_metrics["accuracy"] > best_val_acc:
             best_val_acc = val_metrics["accuracy"]
             save_checkpoint(
-                model, optimizer, epoch, val_metrics, str(output_dir / "best_model.pt")
+                model,
+                optimizer,
+                epoch,
+                val_metrics,
+                str(output_dir / "best_model.pt"),
+                metadata=checkpoint_meta,
             )
 
             if wandb_run is not None:
@@ -634,6 +652,7 @@ def main():
                 epoch,
                 val_metrics,
                 str(output_dir / f"checkpoint_epoch_{epoch + 1}.pt"),
+                metadata=checkpoint_meta,
             )
 
     # Save final model
@@ -643,6 +662,7 @@ def main():
         args.epochs - 1,
         val_metrics,
         str(output_dir / "final_model.pt"),
+        metadata=checkpoint_meta,
     )
 
     # Save training history
