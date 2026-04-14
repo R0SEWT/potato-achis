@@ -3,14 +3,14 @@ name = "potato-achis"
 version = "0.1.0"
 description = "Multi-source Domain Adaptation for Andean Potato Disease Classification"
 readme = "README.md"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 authors = [{ name = "R0SEWT", email = "your-email@example.com" }]
 keywords = ["deep-learning", "domain-adaptation", "plant-disease", "pytorch"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -59,10 +59,16 @@ notebooks = [
     "ipykernel>=6.28.0",
     "ipywidgets>=8.1.0",
 ]
+onnx = [
+    "onnx>=1.15.0,<1.19.0",
+    "onnxruntime>=1.17.0",
+]
 
 [project.scripts]
 potato-train = "src.train:main"
 potato-eval = "src.eval:main"
+potato-export-onnx = "src.export_onnx:main"
+potato-predict = "src.predict:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -17,7 +17,7 @@ loss_weights:
   classification: 1.0
   domain_adversarial: 0.5
   mmd: 1.0
-  # classifier_alignment: 0.3  # DEFERRED
+  classifier_alignment: 0.3
 
 # Training schedule
 stage1_epochs: 30 # Feature alignment

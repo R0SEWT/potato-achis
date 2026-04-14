@@ -6,7 +6,7 @@
 [![PyTorch 2.0+](https://img.shields.io/badge/pytorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
 [![uv](https://img.shields.io/badge/uv-package%20manager-blueviolet)](https://docs.astral.sh/uv/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 ## 🎯 Overview
 
@@ -72,7 +72,7 @@ cd potato-achis
 uv sync
 
 # With optional dependencies
-uv sync --extra dev --extra viz --extra tracking
+uv sync --extra dev --extra viz --extra tracking --extra onnx
 
 # Or install all extras
 uv sync --all-extras
@@ -122,8 +122,22 @@ uv run python src/train.py \
     --target_dir ./data/raw/andean_field \
     --epochs 50 \
     --lambda_mmd 1.0 \
-    --lambda_adv 0.5
+    --lambda_adv 0.5 \
+    --lambda_align 0.0
 ```
+
+**W&B tracking (requires optional `tracking` extra):**
+```bash
+uv sync --extra tracking
+uv run python src/train.py \
+    --model mdfan \
+    --backbone resnet50 \
+    --source_dirs ./data/raw/plantvillage ./data/raw/local_commercial \
+    --target_dir ./data/raw/andean_field \
+    --use_wandb
+```
+
+Set `WANDB_PROJECT` / `WANDB_ENTITY` env vars as needed.
 
 ### Evaluation
 
@@ -134,6 +148,41 @@ uv run python src/eval.py \
     --ood_dir ./data/raw/andean_field/ood_classes \
     --ood_method entropy \
     --visualize
+```
+
+**Grad-CAM (requires optional `viz` extra):**
+```bash
+uv sync --extra viz
+uv run python src/eval.py \
+    --checkpoint ./outputs/best_model.pt \
+    --test_dir ./data/raw/andean_field/test \
+    --gradcam
+```
+
+### Prediction
+
+```bash
+uv run potato-predict \
+    --checkpoint ./outputs/exp/best_model.pt \
+    --input ./some_image.jpg
+
+uv run potato-predict \
+    --checkpoint ./outputs/exp/best_model.pt \
+    --input ./some_folder_of_images \
+    --output ./outputs/predictions.jsonl
+```
+
+### ONNX export
+
+```bash
+uv sync --extra onnx
+uv run potato-export-onnx \
+    --checkpoint ./outputs/exp/best_model.pt \
+    --model baseline \
+    --backbone mobilenet_v3_small
+
+# If your checkpoint was trained with a non-default class count, override it:
+#   --num_classes <N>
 ```
 
 ## 🧪 Disease Classes
@@ -219,10 +268,12 @@ uv build                      # Build wheel/sdist
 - [x] OOD detection (MSP, entropy, energy)
 - [x] Andean field augmentations
 - [x] uv package management
-- [ ] Classifier alignment (Stage 2)
-- [ ] Grad-CAM visualization
-- [ ] W&B integration
-- [ ] ONNX export
+- [x] Classifier alignment (Stage 2)
+- [x] Grad-CAM visualization
+- [x] W&B integration
+- [x] ONNX export
+
+Detailed roadmap: see [docs/roadmap.md](docs/roadmap.md)
 
 ## 📝 Citation
 
@@ -237,4 +288,4 @@ uv build                      # Build wheel/sdist
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE)
+Apache License 2.0 - see [LICENSE](LICENSE)

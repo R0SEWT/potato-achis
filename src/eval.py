@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -32,52 +33,141 @@ from src.utils.metrics import (
     compute_per_class_accuracy,
 )
 from src.utils.ood_detection import OODDetector, compute_ood_metrics
-from src.utils.visualization import plot_confusion_matrix, plot_tsne
+from src.utils.visualization import plot_confusion_matrix, plot_tsne, visualize_gradcam
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+_GRADCAM_TARGET_LAYER_BY_BACKBONE: dict[str, str] = {
+    "mobilenet_v3_small": "backbone.backbone.conv_head",
+    "mobilenet_v3_large": "backbone.backbone.conv_head",
+    "resnet18": "backbone.backbone.layer4",
+    "resnet34": "backbone.backbone.layer4",
+    "resnet50": "backbone.backbone.layer4",
+    "resnet101": "backbone.backbone.layer4",
+}
+
+
+def get_default_gradcam_target_layer(backbone: str) -> str:
+    try:
+        return _GRADCAM_TARGET_LAYER_BY_BACKBONE[backbone]
+    except KeyError as exc:
+        supported = sorted(_GRADCAM_TARGET_LAYER_BY_BACKBONE)
+        raise ValueError(
+            f"Unsupported backbone '{backbone}' for Grad-CAM. Supported: {supported}"
+        ) from exc
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate potato disease classifier")
 
     # Model
-    parser.add_argument('--checkpoint', type=str, required=True,
-                        help='Path to model checkpoint')
-    parser.add_argument('--model', type=str, default='baseline',
-                        choices=['baseline', 'mdfan'])
-    parser.add_argument('--backbone', type=str, default='mobilenet_v3_small')
-    parser.add_argument('--num_classes', type=int, default=5)
+    parser.add_argument(
+        "--checkpoint", type=str, required=True, help="Path to model checkpoint"
+    )
+    parser.add_argument(
+        "--model", type=str, default="baseline", choices=["baseline", "mdfan"]
+    )
+    parser.add_argument("--backbone", type=str, default="mobilenet_v3_small")
+    parser.add_argument(
+        "--num_classes",
+        type=int,
+        default=None,
+        help="Number of classes (default: infer from checkpoint)",
+    )
+    parser.add_argument(
+        "--num_sources",
+        type=int,
+        default=None,
+        help="Number of source domains for MDFAN (default: infer from checkpoint)",
+    )
 
     # Data
-    parser.add_argument('--test_dir', type=str, required=True,
-                        help='Test data directory')
-    parser.add_argument('--ood_dir', type=str, default=None,
-                        help='OOD data directory for open-set evaluation')
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--num_workers', type=int, default=4)
-    parser.add_argument('--image_size', type=int, default=224)
+    parser.add_argument(
+        "--test_dir", type=str, required=True, help="Test data directory"
+    )
+    parser.add_argument(
+        "--ood_dir",
+        type=str,
+        default=None,
+        help="OOD data directory for open-set evaluation",
+    )
+    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--image_size", type=int, default=224)
 
     # OOD detection
-    parser.add_argument('--ood_method', type=str, default='msp',
-                        choices=['msp', 'entropy', 'energy'],
-                        help='OOD detection method')
-    parser.add_argument('--ood_threshold', type=float, default=None,
-                        help='OOD rejection threshold')
+    parser.add_argument(
+        "--ood_method",
+        type=str,
+        default="msp",
+        choices=["msp", "entropy", "energy"],
+        help="OOD detection method",
+    )
+    parser.add_argument(
+        "--ood_threshold", type=float, default=None, help="OOD rejection threshold"
+    )
 
     # Output
-    parser.add_argument('--output_dir', type=str, default='./outputs/eval')
-    parser.add_argument('--save_predictions', action='store_true')
-    parser.add_argument('--visualize', action='store_true',
-                        help='Generate visualizations')
+    parser.add_argument("--output_dir", type=str, default="./outputs/eval")
+    parser.add_argument("--save_predictions", action="store_true")
+    parser.add_argument(
+        "--visualize", action="store_true", help="Generate visualizations"
+    )
+
+    # Explainability
+    parser.add_argument(
+        "--gradcam",
+        action="store_true",
+        help="Generate a Grad-CAM visualization (requires torchcam; install with --extra viz)",
+    )
 
     # Device
-    parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument("--device", type=str, default="cuda")
 
     return parser.parse_args()
+
+
+def _infer_num_sources(state_dict: dict[str, torch.Tensor]) -> int:
+    pattern = re.compile(r"^(?:module\.)?source_classifiers\.(\d+)\.")
+    indices: set[int] = set()
+
+    for key in state_dict:
+        match = pattern.match(key)
+        if match is not None:
+            indices.add(int(match.group(1)))
+
+    if not indices:
+        raise ValueError(
+            "Could not infer num_sources from checkpoint. "
+            "Pass --num_sources explicitly."
+        )
+
+    return max(indices) + 1
+
+
+def _infer_num_classes(state_dict: dict[str, torch.Tensor], model_type: str) -> int:
+    candidates: list[re.Pattern[str]]
+
+    if model_type == "baseline":
+        candidates = [re.compile(r"^(?:module\.)?head\.classifier\.weight$")]
+    else:
+        candidates = [
+            re.compile(r"^(?:module\.)?combined_classifier\.classifier\.weight$"),
+            re.compile(r"^(?:module\.)?source_classifiers\.\d+\.classifier\.weight$"),
+        ]
+
+    for pattern in candidates:
+        for key, value in state_dict.items():
+            if pattern.match(key) and value.ndim == 2:
+                return int(value.shape[0])
+
+    raise ValueError(
+        "Could not infer num_classes from checkpoint. Pass --num_classes explicitly."
+    )
 
 
 @torch.no_grad()
@@ -90,7 +180,7 @@ def evaluate_classification(
 ) -> dict:
     """
     Evaluate classification performance.
-    
+
     Returns:
         Dictionary with all metrics
     """
@@ -105,13 +195,17 @@ def evaluate_classification(
         images = images.to(device)
 
         # Get predictions and features
-        if hasattr(model, 'forward'):
+        if hasattr(model, "forward"):
             outputs = model(images, return_features=True)
             if isinstance(outputs, tuple):
                 logits, features = outputs
             else:
                 logits = outputs
-                features = model.extract_features(images) if hasattr(model, 'extract_features') else None
+                features = (
+                    model.extract_features(images)
+                    if hasattr(model, "extract_features")
+                    else None
+                )
         else:
             logits = model(images)
             features = None
@@ -128,24 +222,23 @@ def evaluate_classification(
     all_preds = torch.cat(all_preds)
     all_labels = torch.cat(all_labels)
     all_probs = torch.cat(all_probs)
-    if all_features:
-        all_features = torch.cat(all_features)
-    else:
-        all_features = None
+    all_features = torch.cat(all_features) if all_features else None
 
     # Compute metrics
     results = {
-        'accuracy': compute_accuracy(all_preds, all_labels),
-        'f1_macro': compute_f1(all_preds, all_labels, num_classes, 'macro'),
-        'f1_weighted': compute_f1(all_preds, all_labels, num_classes, 'weighted'),
-        'per_class_accuracy': compute_per_class_accuracy(
+        "accuracy": compute_accuracy(all_preds, all_labels),
+        "f1_macro": compute_f1(all_preds, all_labels, num_classes, "macro"),
+        "f1_weighted": compute_f1(all_preds, all_labels, num_classes, "weighted"),
+        "per_class_accuracy": compute_per_class_accuracy(
             all_preds, all_labels, num_classes, class_names
         ),
-        'confusion_matrix': compute_confusion_matrix(all_preds, all_labels, num_classes),
-        'predictions': all_preds.numpy(),
-        'labels': all_labels.numpy(),
-        'probabilities': all_probs.numpy(),
-        'features': all_features.numpy() if all_features is not None else None,
+        "confusion_matrix": compute_confusion_matrix(
+            all_preds, all_labels, num_classes
+        ),
+        "predictions": all_preds.numpy(),
+        "labels": all_labels.numpy(),
+        "probabilities": all_probs.numpy(),
+        "features": all_features.numpy() if all_features is not None else None,
     }
 
     return results
@@ -157,12 +250,12 @@ def evaluate_ood(
     in_dist_loader,
     ood_loader,
     device: str,
-    method: str = 'msp',
+    method: str = "msp",
     threshold: float | None = None,
 ) -> dict:
     """
     Evaluate OOD detection performance.
-    
+
     Returns:
         Dictionary with OOD metrics
     """
@@ -197,11 +290,11 @@ def evaluate_ood(
 
     results = {
         **ood_metrics,
-        'threshold': threshold,
-        'in_dist_rejection_rate': in_rejected,
-        'ood_rejection_rate': ood_rejected,
-        'in_scores': in_scores,
-        'ood_scores': ood_scores,
+        "threshold": threshold,
+        "in_dist_rejection_rate": in_rejected,
+        "ood_rejection_rate": ood_rejected,
+        "in_scores": in_scores,
+        "ood_scores": ood_scores,
     }
 
     return results
@@ -211,7 +304,7 @@ def main():
     args = parse_args()
 
     # Setup
-    device = args.device if torch.cuda.is_available() else 'cpu'
+    device = args.device if torch.cuda.is_available() else "cpu"
     logger.info(f"Using device: {device}")
 
     # Create output directory
@@ -222,22 +315,45 @@ def main():
     logger.info(f"Loading checkpoint: {args.checkpoint}")
     checkpoint = torch.load(args.checkpoint, map_location=device)
 
+    state_dict = checkpoint.get("model_state_dict", checkpoint)
+    checkpoint_meta = checkpoint.get("meta", {}) if isinstance(checkpoint, dict) else {}
+
+    num_classes = args.num_classes
+    if num_classes is None:
+        meta_num_classes = checkpoint_meta.get("num_classes")
+        if isinstance(meta_num_classes, int):
+            num_classes = meta_num_classes
+        else:
+            num_classes = _infer_num_classes(state_dict, args.model)
+        logger.info(f"Inferred num_classes={num_classes} from checkpoint")
+
     # Create model
-    if args.model == 'baseline':
+    if args.model == "baseline":
         model = create_model(
-            model_type='baseline',
+            model_type="baseline",
             backbone=args.backbone,
-            num_classes=args.num_classes,
+            num_classes=num_classes,
+            pretrained=False,
         )
     else:
+        num_sources = args.num_sources
+        if num_sources is None:
+            meta_num_sources = checkpoint_meta.get("num_sources")
+            if isinstance(meta_num_sources, int):
+                num_sources = meta_num_sources
+            else:
+                num_sources = _infer_num_sources(state_dict)
+            logger.info(f"Inferred num_sources={num_sources} from checkpoint")
+
         model = create_model(
-            model_type='mdfan',
+            model_type="mdfan",
             backbone=args.backbone,
-            num_classes=args.num_classes,
-            num_sources=2,  # Default, not used for inference
+            num_classes=num_classes,
+            num_sources=num_sources,
+            pretrained=False,
         )
 
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model.load_state_dict(state_dict)
     model = model.to(device)
     model.eval()
 
@@ -260,19 +376,34 @@ def main():
     )
 
     class_names = test_dataset.classes
-    logger.info(f"Test dataset: {len(test_dataset)} samples, {len(class_names)} classes")
+
+    if len(class_names) > num_classes:
+        raise ValueError(
+            f"Test dataset has {len(class_names)} classes but model outputs {num_classes}. "
+            "Use a matching test_dir or pass the correct --num_classes."
+        )
+
+    if len(class_names) < num_classes:
+        class_names = class_names + [
+            f"class_{i}" for i in range(len(class_names), num_classes)
+        ]
+
+    logger.info(
+        f"Test dataset: {len(test_dataset)} samples, {len(test_dataset.classes)} classes"
+    )
+    logger.info(f"Model output classes: {num_classes}")
 
     # Evaluate classification
     logger.info("\n=== Classification Evaluation ===")
     cls_results = evaluate_classification(
-        model, test_loader, device, args.num_classes, class_names
+        model, test_loader, device, num_classes, class_names
     )
 
     logger.info(f"Accuracy: {cls_results['accuracy']:.4f}")
     logger.info(f"F1 (macro): {cls_results['f1_macro']:.4f}")
     logger.info(f"F1 (weighted): {cls_results['f1_weighted']:.4f}")
     logger.info("\nPer-class accuracy:")
-    for cls, acc in cls_results['per_class_accuracy'].items():
+    for cls, acc in cls_results["per_class_accuracy"].items():
         logger.info(f"  {cls}: {acc:.4f}")
 
     # OOD evaluation
@@ -295,7 +426,10 @@ def main():
         logger.info(f"OOD dataset: {len(ood_dataset)} samples")
 
         ood_results = evaluate_ood(
-            model, test_loader, ood_loader, device,
+            model,
+            test_loader,
+            ood_loader,
+            device,
             method=args.ood_method,
             threshold=args.ood_threshold,
         )
@@ -304,7 +438,9 @@ def main():
         logger.info(f"AUPR: {ood_results['aupr']:.4f}")
         logger.info(f"FPR@95TPR: {ood_results['fpr@95tpr']:.4f}")
         logger.info(f"Threshold: {ood_results['threshold']:.4f}")
-        logger.info(f"In-dist rejection rate: {ood_results['in_dist_rejection_rate']:.4f}")
+        logger.info(
+            f"In-dist rejection rate: {ood_results['in_dist_rejection_rate']:.4f}"
+        )
         logger.info(f"OOD rejection rate: {ood_results['ood_rejection_rate']:.4f}")
     else:
         ood_results = None
@@ -314,59 +450,82 @@ def main():
         logger.info("\n=== Generating Visualizations ===")
 
         # Confusion matrix
-        fig = plot_confusion_matrix(
-            cls_results['confusion_matrix'],
+        plot_confusion_matrix(
+            cls_results["confusion_matrix"],
             class_names,
-            save_path=str(output_dir / 'confusion_matrix.png'),
-            title='Confusion Matrix'
+            save_path=str(output_dir / "confusion_matrix.png"),
+            title="Confusion Matrix",
         )
         logger.info(f"Saved confusion matrix to {output_dir / 'confusion_matrix.png'}")
 
         # t-SNE (if features available)
-        if cls_results['features'] is not None:
-            fig = plot_tsne(
-                cls_results['features'],
-                cls_results['labels'],
+        if cls_results["features"] is not None:
+            plot_tsne(
+                cls_results["features"],
+                cls_results["labels"],
                 class_names=class_names,
-                save_path=str(output_dir / 'tsne.png'),
-                title='t-SNE Feature Visualization'
+                save_path=str(output_dir / "tsne.png"),
+                title="t-SNE Feature Visualization",
             )
             logger.info(f"Saved t-SNE to {output_dir / 'tsne.png'}")
 
+    # Grad-CAM (requires gradients)
+    if args.gradcam:
+        logger.info("\n=== Generating Grad-CAM ===")
+
+        target_layer = get_default_gradcam_target_layer(args.backbone)
+
+        images, _ = next(iter(test_loader))
+        images = images.to(device)
+
+        try:
+            visualize_gradcam(
+                model,
+                images,
+                target_layer=target_layer,
+                save_path=str(output_dir / "gradcam.png"),
+            )
+        except AttributeError as exc:
+            raise AttributeError(
+                f"Grad-CAM target_layer '{target_layer}' could not be resolved for backbone '{args.backbone}'. "
+                "If you added a new backbone, extend the mapping in eval.py."
+            ) from exc
+        logger.info(f"Saved Grad-CAM to {output_dir / 'gradcam.png'}")
+
     # Save results
     results = {
-        'classification': {
-            'accuracy': cls_results['accuracy'],
-            'f1_macro': cls_results['f1_macro'],
-            'f1_weighted': cls_results['f1_weighted'],
-            'per_class_accuracy': cls_results['per_class_accuracy'],
+        "classification": {
+            "accuracy": cls_results["accuracy"],
+            "f1_macro": cls_results["f1_macro"],
+            "f1_weighted": cls_results["f1_weighted"],
+            "per_class_accuracy": cls_results["per_class_accuracy"],
         },
     }
 
     if ood_results:
-        results['ood_detection'] = {
-            'auroc': ood_results['auroc'],
-            'aupr': ood_results['aupr'],
-            'fpr_at_95tpr': ood_results['fpr@95tpr'],
-            'threshold': ood_results['threshold'],
+        results["ood_detection"] = {
+            "auroc": ood_results["auroc"],
+            "aupr": ood_results["aupr"],
+            "fpr_at_95tpr": ood_results["fpr@95tpr"],
+            "threshold": ood_results["threshold"],
         }
 
     # Save predictions if requested
     if args.save_predictions:
         np.savez(
-            str(output_dir / 'predictions.npz'),
-            predictions=cls_results['predictions'],
-            labels=cls_results['labels'],
-            probabilities=cls_results['probabilities'],
+            str(output_dir / "predictions.npz"),
+            predictions=cls_results["predictions"],
+            labels=cls_results["labels"],
+            probabilities=cls_results["probabilities"],
         )
         logger.info(f"Saved predictions to {output_dir / 'predictions.npz'}")
 
     # Save summary
-    torch.save(results, str(output_dir / 'eval_results.pt'))
+    torch.save(results, str(output_dir / "eval_results.pt"))
     logger.info(f"\nResults saved to: {output_dir}")
 
     return results
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
