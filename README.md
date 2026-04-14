@@ -126,6 +126,19 @@ uv run python src/train.py \
     --lambda_align 0.0
 ```
 
+**W&B tracking (requires optional `tracking` extra):**
+```bash
+uv sync --extra tracking
+uv run python src/train.py \
+    --model mdfan \
+    --backbone resnet50 \
+    --source_dirs ./data/raw/plantvillage ./data/raw/local_commercial \
+    --target_dir ./data/raw/andean_field \
+    --use_wandb
+```
+
+Set `WANDB_PROJECT` / `WANDB_ENTITY` env vars as needed.
+
 ### Evaluation
 
 ```bash

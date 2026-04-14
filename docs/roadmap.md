@@ -41,8 +41,8 @@ Module implemented at `src/models/mdfan/classifier_alignment.py` and integrated 
 
 Dependency already in `pyproject.toml` (`tracking` extra).
 
-- [ ] Add `--use_wandb` flag to `src/train.py`
-- [ ] Log metrics, hyperparams, and artifacts alongside TensorBoard
+- [x] Add `--use_wandb` flag to `src/train.py`
+- [x] Log metrics, hyperparams, and artifacts alongside TensorBoard
 
 ### 4. ONNX export
 
