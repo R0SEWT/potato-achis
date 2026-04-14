@@ -40,7 +40,7 @@ PAGER=cat GH_PAGER=cat gh pr create \
   --title "Release: develop → main" \
   --body $'Summary\n- Promote the current `develop` state to `main`.'
 
-PAGER=cat GH_PAGER=cat gh pr merge --auto --merge --delete-branch
+PAGER=cat GH_PAGER=cat gh pr merge --auto --merge
 ```
 
 ## 4. Tag + GitHub Release
